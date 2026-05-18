@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "FitTracker",
+    "slug": "fittracker",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "fittracker",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.agathasweb.fittracker"
+    },
+    "android": {
+      "package": "com.agathasweb.fittracker",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F172A"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

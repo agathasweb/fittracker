@@ -1,0 +1,137 @@
+name: fittracker-dev
+
+# =============================================================
+# Stack privada — fittracker-dev
+# API:    FastAPI + PostgreSQL + Redis (https://fittracker-dev.agathasweb.com)
+# Mobile: React Native + Expo (porta 19006 web preview / Expo Go)
+# =============================================================
+
+networks:
+  fittracker-dev-net:
+    name: fittracker-dev-net
+    driver: bridge
+  agathas-proxy:
+    name: agathas-proxy
+    external: true
+
+volumes:
+  fittracker_pg_data:
+    name: fittracker-dev-postgres
+  fittracker_redis_data:
+    name: fittracker-dev-redis
+  fittracker_pip_cache:
+    name: fittracker-dev-pip-cache
+  fittracker_node_modules:
+    name: fittracker-dev-node-modules
+
+services:
+  # ── API FastAPI ────────────────────────────────────────────
+  api:
+    build:
+      context: ./docker/api
+      dockerfile: Dockerfile
+    container_name: fittracker-dev-api
+    restart: unless-stopped
+    working_dir: /app
+    networks:
+      fittracker-dev-net:
+      agathas-proxy:
+        aliases:
+          - fittracker-dev-api
+    expose:
+      - "8000"
+    volumes:
+      - ./api:/app:rw
+      - fittracker_pip_cache:/root/.cache/pip
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fittracker:fittracker@postgres:5432/fittracker
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-changeme-em-producao}
+      JWT_EXPIRES_MIN: 60
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      TACO_DB_PATH: /app/data/taco.sqlite
+      TZ: America/Sao_Paulo
+    command: >
+      sh -c "
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── PostgreSQL ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: fittracker-dev-postgres
+    restart: unless-stopped
+    networks:
+      - fittracker-dev-net
+    environment:
+      POSTGRES_DB: fittracker
+      POSTGRES_USER: fittracker
+      POSTGRES_PASSWORD: fittracker
+      TZ: America/Sao_Paulo
+    volumes:
+      - fittracker_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fittracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Redis ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: fittracker-dev-redis
+    restart: unless-stopped
+    networks:
+      - fittracker-dev-net
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - fittracker_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Expo (React Native) — dev server + web preview ─────────
+  mobile:
+    image: node:22-alpine
+    container_name: fittracker-dev-mobile
+    working_dir: /app
+    restart: unless-stopped
+    networks:
+      fittracker-dev-net:
+      agathas-proxy:
+        aliases:
+          - fittracker-dev-web
+    expose:
+      - "19006"   # web preview
+      - "8081"    # metro bundler
+    ports:
+      - "19000:19000"   # Expo Go (LAN — celular conecta aqui via QR)
+      - "19001:19001"   # Expo dev tools websocket
+    volumes:
+      - ./mobile:/app
+      - fittracker_node_modules:/app/node_modules
+    environment:
+      EXPO_USE_FAST_RESOLVER: "1"
+      REACT_NATIVE_PACKAGER_HOSTNAME: ${LAN_IP:-127.0.0.1}
+      EXPO_PUBLIC_API_URL: https://fittracker-dev.agathasweb.com/api
+    command: >
+      sh -c "
+        apk add --no-cache git python3 make g++ &&
+        if [ ! -f node_modules/.install-done ]; then
+          npm install --legacy-peer-deps && touch node_modules/.install-done;
+        fi &&
+        npx expo start --web --port 19006 --host 0.0.0.0
+      "

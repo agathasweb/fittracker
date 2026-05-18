@@ -1,0 +1,10 @@
+.env
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+api/__pycache__/
+api/.venv/
+data/
+*.pyc
+.DS_Store
+anotacoes.md
