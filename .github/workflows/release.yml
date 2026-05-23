@@ -73,7 +73,10 @@ jobs:
             --profile production \
             --non-interactive \
             --wait \
-            --output ./fittracker.apk
+            --json > build-result.json
+          cat build-result.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['artifacts']['buildUrl'])" > apk-url.txt
+          curl -L -o fittracker.apk "$(cat apk-url.txt)"
+          ls -lh fittracker.apk
 
       - name: Determine release tag
         id: tag
