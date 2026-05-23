@@ -1,0 +1,104 @@
+name: Release Android + OTA
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Tipo de release'
+        required: true
+        default: 'ota'
+        type: choice
+        options:
+          - ota
+          - build-and-release
+
+permissions:
+  contents: write
+
+jobs:
+  ota:
+    name: OTA Update (somente JS)
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_type == 'ota'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci --legacy-peer-deps
+      - name: Publish OTA update (production)
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          eas update --branch production --message "OTA $COMMIT_SHA" --non-interactive
+
+  build:
+    name: Build APK + GitHub Release + OTA
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_type == 'build-and-release')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci --legacy-peer-deps
+
+      - name: Build Android (production)
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas build \
+            --platform android \
+            --profile production \
+            --non-interactive \
+            --wait \
+            --output ./fittracker.apk
+
+      - name: Determine release tag
+        id: tag
+        env:
+          GITHUB_REF_NAME_ENV: ${{ github.ref_name }}
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          if [ "$IS_TAG" = "true" ]; then
+            printf 'tag=%s\n' "$GITHUB_REF_NAME_ENV" >> "$GITHUB_OUTPUT"
+          else
+            printf 'tag=manual-%s\n' "$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: FitTracker ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          files: mobile/fittracker.apk
+
+      - name: Publish OTA update (production)
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          eas update --branch production --message "Release $RELEASE_TAG" --non-interactive

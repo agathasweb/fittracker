@@ -6,6 +6,20 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "fittracker",
+    "icon": "./assets/icon.png",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b6bf1812-5f86-469c-8206-275a83ba6008",
+      "fallbackToCacheTimeout": 3000,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.agathasweb.fittracker"
@@ -13,18 +27,29 @@
     "android": {
       "package": "com.agathasweb.fittracker",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F172A"
       }
     },
     "web": {
       "bundler": "metro",
-      "output": "static"
+      "output": "static",
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-sqlite",
+      "expo-updates"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b6bf1812-5f86-469c-8206-275a83ba6008"
+      }
+    },
+    "owner": "agweb"
   }
 }

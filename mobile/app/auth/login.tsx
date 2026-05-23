@@ -1,72 +1,125 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
-import { router } from 'expo-router';
-import { colors, spacing, radius } from '../../lib/theme';
+import { Link, useRouter } from 'expo-router';
+import { useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { Button } from '../../components/Button';
+import { Input } from '../../components/Input';
+import { Logo } from '../../components/Logo';
+import { login } from '../../lib/auth';
+import { colors, spacing } from '../../lib/theme';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('demo@fittracker.app');
-  const [password, setPassword] = useState('demo');
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSubmit() {
+    setError(null);
+    if (!email.trim() || !password) {
+      setError('Preencha e-mail e senha');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await login(email, password);
+      router.replace('/(tabs)');
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao entrar');
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Text style={styles.brand}>🏋️ FitTracker</Text>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <View style={{ alignItems: 'center', marginBottom: spacing.lg }}>
+        <Logo size={88} />
+      </View>
+      <Text style={styles.brand}>FitTracker</Text>
       <Text style={styles.subtitle}>Dieta · Treino · Resultado</Text>
 
       <View style={styles.form}>
-        <Text style={styles.label}>E-mail</Text>
-        <TextInput
-          style={styles.input}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholderTextColor={colors.textMuted}
+        <Input
+          label="E-mail"
           value={email}
           onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          placeholder="voce@exemplo.com"
         />
-
-        <Text style={styles.label}>Senha</Text>
-        <TextInput
-          style={styles.input}
-          secureTextEntry
-          placeholderTextColor={colors.textMuted}
+        <Input
+          label="Senha"
           value={password}
           onChangeText={setPassword}
+          secureTextEntry
+          placeholder="••••••"
         />
 
-        <TouchableOpacity style={styles.btn} onPress={() => router.replace('/(tabs)')}>
-          <Text style={styles.btnText}>Entrar</Text>
-        </TouchableOpacity>
+        {error && <Text style={styles.error}>{error}</Text>}
 
-        <TouchableOpacity style={styles.linkBtn}>
-          <Text style={styles.linkText}>Criar conta</Text>
-        </TouchableOpacity>
+        <Button title="Entrar" onPress={onSubmit} loading={submitting} />
+
+        <View style={styles.linkRow}>
+          <Text style={styles.linkHint}>Não tem conta ainda?</Text>
+          <Link href="/auth/register" replace style={styles.link}>
+            Criar conta
+          </Link>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, padding: spacing.lg, justifyContent: 'center' },
-  brand: { color: colors.text, fontSize: 36, fontWeight: '800', textAlign: 'center' },
-  subtitle: { color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xl },
-  form: { gap: spacing.sm },
-  label: { color: colors.textMuted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
-  input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    color: colors.text,
-    fontSize: 16,
+  container: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    padding: spacing.lg,
+    justifyContent: 'center',
   },
-  btn: {
-    backgroundColor: colors.primary,
-    padding: spacing.md,
-    borderRadius: radius.md,
+  brand: {
+    color: colors.text,
+    fontSize: 36,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  subtitle: {
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  form: { gap: spacing.xs },
+  error: {
+    color: colors.danger,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
+    gap: spacing.xs,
     marginTop: spacing.md,
   },
-  btnText: { color: colors.bg, fontSize: 16, fontWeight: '700' },
-  linkBtn: { padding: spacing.md, alignItems: 'center' },
-  linkText: { color: colors.primary, fontWeight: '600' },
+  linkHint: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  link: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });

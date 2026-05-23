@@ -16,8 +16,11 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: colors.bg },
           }}
         >
+          <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/login" options={{ title: 'Entrar' }} />
+          <Stack.Screen name="auth" options={{ headerShown: false }} />
+          <Stack.Screen name="hydration" options={{ title: 'Hidratação' }} />
+          <Stack.Screen name="meal-template/[id]" options={{ title: 'Refeição padrão' }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>
