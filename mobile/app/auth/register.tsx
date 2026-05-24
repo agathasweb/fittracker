@@ -14,6 +14,7 @@ import { Input } from '../../components/Input';
 import { Logo } from '../../components/Logo';
 import { OptionPicker } from '../../components/OptionPicker';
 import { register } from '../../lib/auth';
+import { brDateToISO, maskBrDate } from '../../lib/format';
 import { colors, spacing } from '../../lib/theme';
 import {
   ACTIVITY_LABEL,
@@ -83,7 +84,7 @@ export default function Register() {
     if (passwordConfirm !== password) e.passwordConfirm = 'Senhas não coincidem';
     if (!name.trim()) e.name = 'Informe seu nome';
     if (!sex) e.sex = 'Selecione';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) e.birthDate = 'Use AAAA-MM-DD';
+    if (!brDateToISO(birthDate)) e.birthDate = 'Use dd/mm/aaaa';
     const h = Number(heightCm);
     if (!h || h < 80 || h > 250) e.heightCm = '80–250 cm';
     const cw = Number(currentWeight);
@@ -107,14 +108,14 @@ export default function Register() {
         password,
         name,
         sex: sex!,
-        birth_date: birthDate,
+        birth_date: brDateToISO(birthDate)!,
         height_cm: Number(heightCm),
         current_weight_kg: Number(currentWeight),
         goal_weight_kg: Number(goalWeight),
         activity_level: activity!,
         daily_water_goal_ml: Number(waterGoal),
       });
-      router.replace('/(tabs)');
+      router.replace('/');
     } catch (err: any) {
       setErrors({ form: err?.message ?? 'Erro ao criar conta' });
     } finally {
@@ -183,10 +184,12 @@ export default function Register() {
           <Input
             label="Data de nascimento"
             value={birthDate}
-            onChangeText={setBirthDate}
-            placeholder="AAAA-MM-DD"
+            onChangeText={(v) => setBirthDate(maskBrDate(v))}
+            placeholder="dd/mm/aaaa"
             error={errors.birthDate}
             autoCapitalize="none"
+            keyboardType="numeric"
+            maxLength={10}
           />
           <View style={styles.row}>
             <View style={{ flex: 1 }}>

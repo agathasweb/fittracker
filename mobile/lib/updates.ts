@@ -3,6 +3,9 @@ import { Platform } from 'react-native';
 
 /**
  * Checa se há nova versão JS disponível no canal EAS Update.
+ * Baixa em background mas NÃO recarrega o app — a nova versão entra em
+ * vigor quando o usuário fechar e abrir de novo. Evita reload em loop e
+ * tela cinza quando há update aplicado durante a primeira abertura.
  * Web e modo dev são ignorados (expo-updates não roda neles).
  */
 export async function checkForOTAUpdate(): Promise<boolean> {
@@ -13,7 +16,6 @@ export async function checkForOTAUpdate(): Promise<boolean> {
     const result = await Updates.checkForUpdateAsync();
     if (result.isAvailable) {
       await Updates.fetchUpdateAsync();
-      await Updates.reloadAsync();
       return true;
     }
   } catch {

@@ -68,8 +68,13 @@ export function useAuth(): AuthState & { reload: () => Promise<void> } {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
 
   const reload = useCallback(async () => {
-    const u = await getCurrentUser();
-    setState(u ? { status: 'authed', user: u } : { status: 'guest' });
+    try {
+      const u = await getCurrentUser();
+      setState(u ? { status: 'authed', user: u } : { status: 'guest' });
+    } catch (e) {
+      console.error('useAuth reload failed:', e);
+      setState({ status: 'guest' });
+    }
   }, []);
 
   useEffect(() => {

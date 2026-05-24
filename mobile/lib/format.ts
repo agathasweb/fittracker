@@ -1,4 +1,4 @@
-import { differenceInYears, format, parseISO } from 'date-fns';
+import { differenceInYears, format, isValid, parse, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ACTIVITY_FACTOR, ActivityLevel, Sex } from './types';
 
@@ -28,6 +28,31 @@ export function formatDateBR(iso: string): string {
 
 export function ageFromBirth(birth: string): number {
   return differenceInYears(new Date(), parseISO(birth));
+}
+
+/** Aplica máscara dd/mm/aaaa enquanto o usuário digita. */
+export function maskBrDate(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+/** "24/05/1989" -> "1989-05-24". Retorna null se inválida. */
+export function brDateToISO(br: string): string | null {
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(br)) return null;
+  const d = parse(br, 'dd/MM/yyyy', new Date());
+  if (!isValid(d)) return null;
+  return format(d, 'yyyy-MM-dd');
+}
+
+/** "1989-05-24" -> "24/05/1989". */
+export function isoDateToBR(iso: string): string {
+  try {
+    return format(parseISO(iso), 'dd/MM/yyyy');
+  } catch {
+    return iso;
+  }
 }
 
 /** Mifflin-St Jeor */

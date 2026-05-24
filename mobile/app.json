@@ -2,7 +2,7 @@
   "expo": {
     "name": "FitTracker",
     "slug": "fittracker",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "fittracker",
@@ -12,8 +12,8 @@
     },
     "updates": {
       "url": "https://u.expo.dev/b6bf1812-5f86-469c-8206-275a83ba6008",
-      "fallbackToCacheTimeout": 3000,
-      "checkAutomatically": "ON_LOAD"
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "NEVER"
     },
     "splash": {
       "image": "./assets/splash.png",

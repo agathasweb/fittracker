@@ -29,7 +29,7 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       await login(email, password);
-      router.replace('/(tabs)');
+      router.replace('/');
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao entrar');
     } finally {
