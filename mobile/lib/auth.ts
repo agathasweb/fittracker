@@ -1,29 +1,52 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import bcrypt from 'bcryptjs';
 import * as Crypto from 'expo-crypto';
 import { useCallback, useEffect, useState } from 'react';
 import { createUser, getUserByEmail, getUserById, NewUser } from './repos/users';
 import { User } from './types';
 
 const SESSION_KEY = '@fittracker/current_user_id';
-const BCRYPT_ROUNDS = 10;
+const SALT_BYTES = 16;
 
-// bcryptjs tenta usar `crypto.randomBytes` (Node) ou `window.crypto.getRandomValues`
-// (browser), nenhum dos dois existe no Hermes/RN. Sem esse fallback o hash de
-// senha quebra com "Requiring unknown module" ao gerar o salt.
-bcrypt.setRandomFallback((len: number) => Array.from(Crypto.getRandomBytes(len)));
+function bytesToHex(bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) {
+    s += bytes[i].toString(16).padStart(2, '0');
+  }
+  return s;
+}
 
 const listeners = new Set<() => void>();
 function notify() {
   listeners.forEach((cb) => cb());
 }
 
+/**
+ * Hash de senha com salt aleatório + SHA-256 (via expo-crypto, nativo).
+ * Formato armazenado: `<salt_hex>$<hash_hex>`.
+ *
+ * Pra um app 100% local (SQLite no device, sem sync), a hash existe pra
+ * gating de UI — quem tem acesso ao SQLite já tem todos os dados, então
+ * PBKDF2/bcrypt seriam over-engineering.
+ */
 export async function hashPassword(plain: string): Promise<string> {
-  return bcrypt.hash(plain, BCRYPT_ROUNDS);
+  const salt = bytesToHex(Crypto.getRandomBytes(SALT_BYTES));
+  const hash = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    salt + plain
+  );
+  return `${salt}$${hash}`;
 }
 
-export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(plain, hash);
+export async function verifyPassword(plain: string, stored: string): Promise<boolean> {
+  const sep = stored.indexOf('$');
+  if (sep <= 0) return false;
+  const salt = stored.slice(0, sep);
+  const hash = stored.slice(sep + 1);
+  const calc = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    salt + plain
+  );
+  return calc === hash;
 }
 
 export async function register(
