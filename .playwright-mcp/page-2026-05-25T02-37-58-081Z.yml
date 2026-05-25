@@ -1,0 +1,72 @@
+- generic [ref=e113]:
+  - generic [ref=e115]:
+    - heading "Hoje" [level=1] [ref=e118]
+    - generic [ref=e122]:
+      - generic [ref=e123]: Olá, Gutto
+      - generic [ref=e124]: domingo, 24 de maio
+      - generic [ref=e126] [cursor=pointer]:
+        - generic [ref=e127]:
+          - generic [ref=e128]:
+            - generic [ref=e129]: HIDRATAÇÃO
+            - generic [ref=e130]: 0 ml
+            - generic [ref=e131]: de 2800 ml (0%)
+          - generic [ref=e132]: 
+        - generic [ref=e134]: Cadastre suas garrafas favoritas pra lançar com um toque →
+      - generic [ref=e135]:
+        - generic [ref=e136]: BALANÇO DE HOJE
+        - generic [ref=e137]: "-2164 kcal"
+        - generic [ref=e138]: Em déficit — emagrecendo
+        - generic [ref=e139]:
+          - generic [ref=e140]:
+            - generic [ref=e141]: Consumido
+            - generic [ref=e142]: "0"
+          - generic [ref=e143]:
+            - generic [ref=e144]: Meta
+            - generic [ref=e145]: "2164"
+          - generic [ref=e146]:
+            - generic [ref=e147]: GET
+            - generic [ref=e148]: "2664"
+      - generic [ref=e149]:
+        - generic [ref=e150]: Perfil resumido
+        - generic [ref=e151]:
+          - generic [ref=e152]:
+            - generic [ref=e153]: TMB
+            - generic [ref=e154]:
+              - text: "1719"
+              - generic [ref=e155]: kcal
+          - generic [ref=e156]:
+            - generic [ref=e157]: Peso
+            - generic [ref=e158]:
+              - text: "80"
+              - generic [ref=e159]: kg
+          - generic [ref=e160]:
+            - generic [ref=e161]: Meta
+            - generic [ref=e162]:
+              - text: "75"
+              - generic [ref=e163]: kg
+  - tablist [ref=e165]:
+    - tab "  Hoje" [selected] [ref=e167] [cursor=pointer]:
+      - generic [ref=e168]:
+        - generic [ref=e170]: 
+        - generic [ref=e172]: 
+      - generic [ref=e173]: Hoje
+    - tab "  Refeições" [ref=e175] [cursor=pointer]:
+      - generic [ref=e176]:
+        - generic [ref=e178]: 
+        - generic [ref=e180]: 
+      - generic [ref=e181]: Refeições
+    - tab "  Treinos" [ref=e183] [cursor=pointer]:
+      - generic [ref=e184]:
+        - generic [ref=e186]: 
+        - generic [ref=e188]: 
+      - generic [ref=e189]: Treinos
+    - tab "  Progresso" [ref=e191] [cursor=pointer]:
+      - generic [ref=e192]:
+        - generic [ref=e194]: 
+        - generic [ref=e196]: 
+      - generic [ref=e197]: Progresso
+    - tab "  Perfil" [ref=e199] [cursor=pointer]:
+      - generic [ref=e200]:
+        - generic [ref=e202]: 
+        - generic [ref=e204]: 
+      - generic [ref=e205]: Perfil

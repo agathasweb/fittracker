@@ -1,0 +1,59 @@
+- generic [ref=e27]:
+  - heading "Criar conta" [level=1] [ref=e30]
+  - generic [ref=e35]:
+    - generic [ref=e40]: Vamos te conhecer
+    - generic [ref=e41]: Esses dados ficam só no seu aparelho e são usados pros cálculos de meta e progresso.
+    - generic [ref=e42]:
+      - generic [ref=e43]: Acesso
+      - generic [ref=e44]:
+        - generic [ref=e45]: E-mail
+        - textbox "voce@exemplo.com" [ref=e46]: gutto@teste.com
+      - generic [ref=e47]:
+        - generic [ref=e48]: Senha
+        - textbox "Mínimo 6 caracteres" [ref=e49]: senha123
+      - generic [ref=e50]:
+        - generic [ref=e51]: Repetir senha
+        - textbox "Digite novamente" [ref=e52]: senha123
+    - generic [ref=e53]:
+      - generic [ref=e54]: Perfil
+      - generic [ref=e55]:
+        - generic [ref=e56]: Nome
+        - textbox "Como prefere ser chamado" [ref=e57]: Gutto
+      - generic [ref=e58]:
+        - generic [ref=e59]: Sexo
+        - generic [ref=e60]:
+          - generic [ref=e62] [cursor=pointer]: Masculino
+          - generic [ref=e64] [cursor=pointer]: Feminino
+          - generic [ref=e66] [cursor=pointer]: Outro
+      - generic [ref=e67]:
+        - generic [ref=e68]: Data de nascimento
+        - textbox "dd/mm/aaaa" [ref=e69]: 15/03/1990
+      - generic [ref=e70]:
+        - generic [ref=e72]:
+          - generic [ref=e73]: Altura (cm)
+          - textbox "175" [ref=e74]
+        - generic [ref=e76]:
+          - generic [ref=e77]: Peso atual (kg)
+          - textbox "80" [ref=e78]
+    - generic [ref=e79]:
+      - generic [ref=e80]: Metas
+      - generic [ref=e81]:
+        - generic [ref=e82]: Peso meta (kg)
+        - textbox "75" [ref=e83]
+      - generic [ref=e84]:
+        - generic [ref=e85]: Nível de atividade
+        - generic [ref=e88]:
+          - generic [ref=e90] [cursor=pointer]: Sedentário
+          - generic [ref=e92] [cursor=pointer]: Leve
+          - generic [ref=e94] [cursor=pointer]: Moderado
+          - generic [ref=e96] [cursor=pointer]: Ativo
+          - generic [ref=e98] [cursor=pointer]: Muito ativo
+      - generic [ref=e99]:
+        - generic [ref=e100]: Meta diária de água (ml)
+        - textbox "2800" [ref=e108]
+        - generic [ref=e102]: "Calculado automaticamente: 35 ml × kg de peso"
+    - generic [ref=e104] [cursor=pointer]: Criar conta
+    - generic [ref=e105]:
+      - generic [ref=e106]: Já tem conta?
+      - link "Entrar" [ref=e107] [cursor=pointer]:
+        - /url: /auth/login

@@ -1,0 +1,15 @@
+[   43988ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ https://fittracker-dev.agathasweb.com/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=app:193191
+[   44071ms] [LOG] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF. @ https://fittracker-dev.agathasweb.com/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=app:38810
+[   44099ms] [WARNING] "shadow*" style props are deprecated. Use "boxShadow". @ https://fittracker-dev.agathasweb.com/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=app:9442
+[   44403ms] [WARNING] props.pointerEvents is deprecated. Use style.pointerEvents @ https://fittracker-dev.agathasweb.com/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=app:9442
+[   44574ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ https://fittracker-dev.agathasweb.com/auth/register:0
+[   44574ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ https://fittracker-dev.agathasweb.com/auth/register:0
+[  169346ms] [WARNING] Disconnected from Metro (1006: "").
+
+To reconnect:
+- Ensure that Metro is running and available on the same network
+- Reload this app (will trigger further help if Metro cannot be connected to)
+       @ https://fittracker-dev.agathasweb.com/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=app:1982

@@ -1,11 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import bcrypt from 'bcryptjs';
+import * as Crypto from 'expo-crypto';
 import { useCallback, useEffect, useState } from 'react';
 import { createUser, getUserByEmail, getUserById, NewUser } from './repos/users';
 import { User } from './types';
 
 const SESSION_KEY = '@fittracker/current_user_id';
 const BCRYPT_ROUNDS = 10;
+
+// bcryptjs tenta usar `crypto.randomBytes` (Node) ou `window.crypto.getRandomValues`
+// (browser), nenhum dos dois existe no Hermes/RN. Sem esse fallback o hash de
+// senha quebra com "Requiring unknown module" ao gerar o salt.
+bcrypt.setRandomFallback((len: number) => Array.from(Crypto.getRandomBytes(len)));
 
 const listeners = new Set<() => void>();
 function notify() {
