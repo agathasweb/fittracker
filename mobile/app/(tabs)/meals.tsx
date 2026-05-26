@@ -135,7 +135,16 @@ export default function MealsScreen() {
                         {m.template_name ?? 'Refeição avulsa'}
                       </Text>
                     </View>
-                    <Text style={styles.mealKcal}>{Math.round(m.total_kcal)} kcal</Text>
+                    <View style={styles.mealActions}>
+                      <Text style={styles.mealKcal}>{Math.round(m.total_kcal)} kcal</Text>
+                      <Pressable
+                        onPress={() => removeMeal(m)}
+                        style={styles.deleteBtn}
+                        hitSlop={8}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                      </Pressable>
+                    </View>
                   </View>
                   <Text style={styles.mealMeta}>
                     {formatTime(m.consumed_at)} · {m.item_count} item{m.item_count !== 1 ? 's' : ''}
@@ -163,10 +172,19 @@ export default function MealsScreen() {
                     <Text style={styles.mealType}>{MEAL_TYPE_LABEL[t.meal_type]}</Text>
                     <Text style={styles.mealName}>{t.name}</Text>
                   </View>
-                  <Text style={styles.mealKcal}>{Math.round(t.total_kcal)} kcal</Text>
+                  <View style={styles.mealActions}>
+                    <Text style={styles.mealKcal}>{Math.round(t.total_kcal)} kcal</Text>
+                    <Pressable
+                      onPress={() => removeTemplate(t)}
+                      style={styles.deleteBtn}
+                      hitSlop={8}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                    </Pressable>
+                  </View>
                 </View>
                 <Text style={styles.mealMeta}>
-                  {t.item_count} item{t.item_count !== 1 ? 's' : ''} · toque para editar · segure para excluir
+                  {t.item_count} item{t.item_count !== 1 ? 's' : ''} · toque para editar
                 </Text>
               </Card>
             </Pressable>
@@ -290,6 +308,15 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 16,
     fontWeight: '700',
+  },
+  mealActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  deleteBtn: {
+    padding: spacing.xs,
+    borderRadius: radius.md,
   },
   mealMeta: { color: colors.textMuted, fontSize: 12, marginTop: spacing.xs },
   fab: {

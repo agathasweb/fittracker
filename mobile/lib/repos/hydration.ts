@@ -1,4 +1,5 @@
 import { getDb } from '../db';
+import { nowISO } from '../format';
 import { HydrationEntry } from '../types';
 
 export async function addEntry(
@@ -8,11 +9,12 @@ export async function addEntry(
 ): Promise<HydrationEntry> {
   const db = await getDb();
   const r = await db.runAsync(
-    `INSERT INTO hydration_entries (user_id, ml, bottle_id)
-     VALUES (?, ?, ?)`,
+    `INSERT INTO hydration_entries (user_id, ml, bottle_id, consumed_at)
+     VALUES (?, ?, ?, ?)`,
     userId,
     Math.round(ml),
-    bottleId ?? null
+    bottleId ?? null,
+    nowISO()
   );
   const created = await db.getFirstAsync<HydrationEntry>(
     'SELECT * FROM hydration_entries WHERE id = ?',

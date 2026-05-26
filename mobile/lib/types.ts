@@ -22,6 +22,7 @@ export type User = {
   activity_level: ActivityLevel;
   daily_water_goal_ml: number;
   daily_calorie_goal: number | null;
+  avatar_uri: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -60,7 +61,22 @@ export type MealTemplate = {
   user_id: number;
   name: string;
   meal_type: MealType;
+  description: string | null;
+  manual_kcal: number | null;
+  manual_protein_g: number | null;
+  manual_carbs_g: number | null;
+  manual_fat_g: number | null;
+  manual_fiber_g: number | null;
   created_at: string;
+};
+
+/** Macros de um alimento ou preparo, normalizados. */
+export type Macros = {
+  kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number | null;
 };
 
 export type MealTemplateItem = {

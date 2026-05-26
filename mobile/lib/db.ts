@@ -102,6 +102,23 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX idx_weight_user_day ON weight_logs(user_id, logged_at);
     `,
   },
+  {
+    version: 2,
+    sql: `
+      ALTER TABLE users ADD COLUMN avatar_uri TEXT;
+    `,
+  },
+  {
+    version: 3,
+    sql: `
+      ALTER TABLE meal_templates ADD COLUMN description TEXT;
+      ALTER TABLE meal_templates ADD COLUMN manual_kcal REAL;
+      ALTER TABLE meal_templates ADD COLUMN manual_protein_g REAL;
+      ALTER TABLE meal_templates ADD COLUMN manual_carbs_g REAL;
+      ALTER TABLE meal_templates ADD COLUMN manual_fat_g REAL;
+      ALTER TABLE meal_templates ADD COLUMN manual_fiber_g REAL;
+    `,
+  },
 ];
 
 async function applyMigrations(db: SQLite.SQLiteDatabase) {
