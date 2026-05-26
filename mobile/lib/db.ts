@@ -119,6 +119,33 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE meal_templates ADD COLUMN manual_fiber_g REAL;
     `,
   },
+  {
+    version: 4,
+    sql: `
+      CREATE TABLE medications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        dosage TEXT,
+        notes TEXT,
+        color TEXT,
+        reminder_times TEXT,
+        notification_ids TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX idx_medications_user ON medications(user_id, active);
+
+      CREATE TABLE medication_intakes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+        taken_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_intakes_med_day ON medication_intakes(medication_id, taken_at);
+    `,
+  },
 ];
 
 async function applyMigrations(db: SQLite.SQLiteDatabase) {

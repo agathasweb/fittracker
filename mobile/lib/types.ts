@@ -109,6 +109,27 @@ export type WeightLog = {
   logged_at: string;
 };
 
+export type Medication = {
+  id: number;
+  user_id: number;
+  name: string;
+  dosage: string | null;
+  notes: string | null;
+  color: string | null;
+  /** JSON array de horários "HH:mm" pra lembrete diário. */
+  reminder_times: string | null;
+  /** JSON array de IDs de notificações agendadas no expo-notifications. */
+  notification_ids: string | null;
+  active: number;
+  created_at: string;
+};
+
+export type MedicationIntake = {
+  id: number;
+  medication_id: number;
+  taken_at: string;
+};
+
 export const ACTIVITY_FACTOR: Record<ActivityLevel, number> = {
   sedentary: 1.2,
   light: 1.375,

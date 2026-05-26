@@ -46,6 +46,12 @@
           "photosPermission": "O FitTracker precisa acessar suas fotos pra você definir uma foto de perfil.",
           "cameraPermission": "O FitTracker precisa acessar a câmera pra tirar sua foto de perfil."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#A3E635"
+        }
       ]
     ],
     "experiments": {
