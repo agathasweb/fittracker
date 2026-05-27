@@ -283,32 +283,42 @@ export default function MealsScreen() {
               </Text>
             </Card>
           ) : (
-            preparos.map((p) => (
-              <Pressable
-                key={p.id}
-                onPress={() => setPreparoEditor({ open: true, editing: p })}
-                onLongPress={() => removePreparo(p)}
-              >
-                <Card>
-                  <View style={styles.mealHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.mealName}>{p.name}</Text>
-                      <Text style={styles.mealMeta}>
-                        {p.kcal_per_100g} kcal/100g · P {p.protein_g}g · C {p.carbs_g}g · G {p.fat_g}g
-                        {p.fiber_g !== null ? ` · F ${p.fiber_g}g` : ''}
-                      </Text>
+            preparos.map((p) => {
+              const u = p.unit ?? 'g';
+              const isLiquid = u === 'ml';
+              return (
+                <Pressable
+                  key={p.id}
+                  onPress={() => setPreparoEditor({ open: true, editing: p })}
+                  onLongPress={() => removePreparo(p)}
+                >
+                  <Card>
+                    <View style={styles.mealHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.mealName}>
+                          {isLiquid && (
+                            <Ionicons name="wine-outline" size={14} color={colors.primary} />
+                          )}
+                          {isLiquid ? ' ' : ''}
+                          {p.name}
+                        </Text>
+                        <Text style={styles.mealMeta}>
+                          {p.kcal_per_100g} kcal/100{u} · P {p.protein_g}g · C {p.carbs_g}g · G {p.fat_g}g
+                          {p.fiber_g !== null ? ` · F ${p.fiber_g}g` : ''}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => removePreparo(p)}
+                        style={styles.deleteBtn}
+                        hitSlop={8}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                      </Pressable>
                     </View>
-                    <Pressable
-                      onPress={() => removePreparo(p)}
-                      style={styles.deleteBtn}
-                      hitSlop={8}
-                    >
-                      <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                    </Pressable>
-                  </View>
-                </Card>
-              </Pressable>
-            ))
+                  </Card>
+                </Pressable>
+              );
+            })
           )
         )}
       </ScrollView>

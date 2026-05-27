@@ -8,6 +8,7 @@ export type TemplateItemWithFood = MealTemplateItem & {
   carbs_g: number;
   fat_g: number;
   fiber_g: number | null;
+  unit: 'g' | 'ml';
 };
 
 /**
@@ -93,7 +94,7 @@ export async function getTemplateSummary(id: number): Promise<TemplateSummary | 
 export async function getTemplateItems(templateId: number): Promise<TemplateItemWithFood[]> {
   const db = await getDb();
   return db.getAllAsync<TemplateItemWithFood>(
-    `SELECT i.*, f.name AS food_name, f.kcal_per_100g, f.protein_g, f.carbs_g, f.fat_g, f.fiber_g
+    `SELECT i.*, f.name AS food_name, f.kcal_per_100g, f.protein_g, f.carbs_g, f.fat_g, f.fiber_g, f.unit
        FROM meal_template_items i
        JOIN foods f ON f.id = i.food_id
       WHERE i.meal_template_id = ?

@@ -154,27 +154,30 @@ export default function MealTemplateScreen() {
       {items.length === 0 ? (
         <Card>
           <Text style={styles.empty}>
-            Nenhum preparo ainda. Toque em "Adicionar" pra escolher os preparos (em gramas) que
-            compõem essa refeição padrão.
+            Nenhum item ainda. Toque em "Adicionar" pra escolher preparos ou líquidos que compõem
+            essa refeição padrão.
           </Text>
         </Card>
       ) : (
-        items.map((it) => (
-          <View key={it.id} style={styles.itemRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.itemName}>{it.food_name}</Text>
-              <Text style={styles.itemMeta}>
-                {it.quantity_g} g · {calcItemKcal(it)} kcal
-                {it.fiber_g !== null && it.fiber_g !== undefined
-                  ? ` · ${((it.quantity_g * it.fiber_g) / 100).toFixed(1)} g fibra`
-                  : ''}
-              </Text>
+        items.map((it) => {
+          const u = it.unit ?? 'g';
+          return (
+            <View key={it.id} style={styles.itemRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemName}>{it.food_name}</Text>
+                <Text style={styles.itemMeta}>
+                  {it.quantity_g} {u} · {calcItemKcal(it)} kcal
+                  {it.fiber_g !== null && it.fiber_g !== undefined
+                    ? ` · ${((it.quantity_g * it.fiber_g) / 100).toFixed(1)} g fibra`
+                    : ''}
+                </Text>
+              </View>
+              <Pressable onPress={() => removeItem(it.id)} style={styles.removeBtn}>
+                <Ionicons name="trash" size={18} color={colors.danger} />
+              </Pressable>
             </View>
-            <Pressable onPress={() => removeItem(it.id)} style={styles.removeBtn}>
-              <Ionicons name="trash" size={18} color={colors.danger} />
-            </Pressable>
-          </View>
-        ))
+          );
+        })
       )}
 
       <Button

@@ -115,26 +115,29 @@ export default function AdHocMealScreen() {
       {items.length === 0 ? (
         <Card>
           <Text style={styles.empty}>
-            Nenhum preparo ainda. Toque em "Adicionar" pra montar a refeição.
+            Nenhum item ainda. Toque em "Adicionar" pra montar a refeição com preparos ou líquidos.
           </Text>
         </Card>
       ) : (
-        items.map((it) => (
-          <View key={it.tmpId} style={styles.itemRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.itemName}>{it.food.name}</Text>
-              <Text style={styles.itemMeta}>
-                {it.quantity_g} g · {calcKcal(it)} kcal
-                {it.food.fiber_g !== null && it.food.fiber_g !== undefined
-                  ? ` · ${((it.quantity_g * it.food.fiber_g) / 100).toFixed(1)} g fibra`
-                  : ''}
-              </Text>
+        items.map((it) => {
+          const u = it.food.unit ?? 'g';
+          return (
+            <View key={it.tmpId} style={styles.itemRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemName}>{it.food.name}</Text>
+                <Text style={styles.itemMeta}>
+                  {it.quantity_g} {u} · {calcKcal(it)} kcal
+                  {it.food.fiber_g !== null && it.food.fiber_g !== undefined
+                    ? ` · ${((it.quantity_g * it.food.fiber_g) / 100).toFixed(1)} g fibra`
+                    : ''}
+                </Text>
+              </View>
+              <Pressable onPress={() => removeItem(it.tmpId)} style={styles.removeBtn}>
+                <Ionicons name="trash" size={18} color={colors.danger} />
+              </Pressable>
             </View>
-            <Pressable onPress={() => removeItem(it.tmpId)} style={styles.removeBtn}>
-              <Ionicons name="trash" size={18} color={colors.danger} />
-            </Pressable>
-          </View>
-        ))
+          );
+        })
       )}
 
       <Button

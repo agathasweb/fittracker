@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,7 +13,7 @@ import {
 import * as deepseek from '../lib/ai/deepseek';
 import { createFood, updateFood } from '../lib/repos/foods';
 import { colors, radius, spacing } from '../lib/theme';
-import { Food } from '../lib/types';
+import { Food, FoodUnit } from '../lib/types';
 import { Button } from './Button';
 import { Input } from './Input';
 
@@ -22,6 +23,8 @@ type Props = {
   editing: Food | null;
   /** Nome inicial sugerido ao cadastrar (vem da busca). Ignorado se editing está setado. */
   initialName?: string;
+  /** Unidade inicial pra cadastro novo. Default 'g'. Ignorado se editing está setado. */
+  initialUnit?: FoodUnit;
   onClose: () => void;
   onSaved: (food: Food) => void;
 };
@@ -31,8 +34,16 @@ function toStr(n: number | null | undefined): string {
   return String(Number.isInteger(n) ? n : Number(n.toFixed(1)));
 }
 
-export function PreparoEditorModal({ visible, editing, initialName, onClose, onSaved }: Props) {
+export function PreparoEditorModal({
+  visible,
+  editing,
+  initialName,
+  initialUnit = 'g',
+  onClose,
+  onSaved,
+}: Props) {
   const [name, setName] = useState('');
+  const [unit, setUnit] = useState<FoodUnit>('g');
   const [description, setDescription] = useState('');
   const [kcal, setKcal] = useState('');
   const [protein, setProtein] = useState('');
@@ -46,6 +57,7 @@ export function PreparoEditorModal({ visible, editing, initialName, onClose, onS
     if (!visible) return;
     if (editing) {
       setName(editing.name);
+      setUnit(editing.unit ?? 'g');
       setDescription('');
       setKcal(toStr(editing.kcal_per_100g));
       setProtein(toStr(editing.protein_g));
@@ -54,6 +66,7 @@ export function PreparoEditorModal({ visible, editing, initialName, onClose, onS
       setFiber(toStr(editing.fiber_g));
     } else {
       setName(initialName ?? '');
+      setUnit(initialUnit);
       setDescription('');
       setKcal('');
       setProtein('');
@@ -62,19 +75,26 @@ export function PreparoEditorModal({ visible, editing, initialName, onClose, onS
       setFiber('');
     }
     setErrors({});
-  }, [visible, editing, initialName]);
+  }, [visible, editing, initialName, initialUnit]);
+
+  const isLiquid = unit === 'ml';
+  const unitLabel = isLiquid ? '100ml' : '100g';
 
   async function calcWithAI() {
     if (!description.trim()) {
       Alert.alert(
-        'Descreva o preparo',
-        'Conta como você preparou (ingredientes, óleo, cocção). A IA estima os macros por 100g.'
+        isLiquid ? 'Descreva a bebida' : 'Descreva o preparo',
+        isLiquid
+          ? 'Conta o que tem na bebida (ingredientes, açúcar, leite, álcool). A IA estima os macros por 100ml.'
+          : 'Conta como você preparou (ingredientes, óleo, cocção). A IA estima os macros por 100g.'
       );
       return;
     }
     setAiLoading(true);
     try {
-      const m = await deepseek.estimatePreparoPer100g(description);
+      const m = isLiquid
+        ? await deepseek.estimateLiquidPer100ml(description)
+        : await deepseek.estimatePreparoPer100g(description);
       setKcal(toStr(m.kcal));
       setProtein(toStr(m.protein_g));
       setCarbs(toStr(m.carbs_g));
@@ -102,6 +122,7 @@ export function PreparoEditorModal({ visible, editing, initialName, onClose, onS
     const fiberNum = Number(fiber.replace(',', '.'));
     const payload = {
       name,
+      unit,
       kcal_per_100g: k,
       protein_g: Number(protein.replace(',', '.')) || 0,
       carbs_g: Number(carbs.replace(',', '.')) || 0,
@@ -118,6 +139,14 @@ export function PreparoEditorModal({ visible, editing, initialName, onClose, onS
     }
   }
 
+  const title = editing
+    ? isLiquid
+      ? 'Editar líquido'
+      : 'Editar preparo'
+    : isLiquid
+      ? 'Nova bebida'
+      : 'Novo preparo';
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
@@ -125,26 +154,59 @@ export function PreparoEditorModal({ visible, editing, initialName, onClose, onS
         style={styles.backdrop}
       >
         <View style={styles.modal}>
-          <Text style={styles.title}>{editing ? 'Editar preparo' : 'Novo preparo'}</Text>
-          <Text style={styles.sub}>Valores por 100g</Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.sub}>Valores por {unitLabel}</Text>
           <ScrollView style={{ maxHeight: 500 }}>
+            <Text style={styles.fieldLabel}>Tipo</Text>
+            <View style={styles.unitRow}>
+              <Pressable
+                onPress={() => setUnit('g')}
+                style={[styles.unitChip, unit === 'g' && styles.unitChipActive]}
+              >
+                <Text
+                  style={[styles.unitChipText, unit === 'g' && styles.unitChipTextActive]}
+                >
+                  Sólido (g)
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setUnit('ml')}
+                style={[styles.unitChip, unit === 'ml' && styles.unitChipActive]}
+              >
+                <Text
+                  style={[styles.unitChipText, unit === 'ml' && styles.unitChipTextActive]}
+                >
+                  Líquido (ml)
+                </Text>
+              </Pressable>
+            </View>
+
             <Input
-              label="Nome do preparo"
+              label={isLiquid ? 'Nome da bebida' : 'Nome do preparo'}
               value={name}
               onChangeText={setName}
               error={errors.name}
-              placeholder='Ex: "Arroz integral cozido"'
+              placeholder={
+                isLiquid
+                  ? 'Ex: "Café com leite" ou "Cerveja Heineken"'
+                  : 'Ex: "Arroz integral cozido"'
+              }
             />
 
             <Text style={styles.fieldLabel}>Descrição (opcional, pra IA)</Text>
             <Text style={styles.helper}>
-              Conta como você prepara — ingredientes, óleo, cocção. A IA estima os macros por
-              100g do preparo pronto.
+              {isLiquid
+                ? 'Conta o que tem na bebida — ingredientes, açúcar, leite, álcool. A IA estima os macros por 100ml.'
+                : 'Conta como você prepara — ingredientes, óleo, cocção. A IA estima os macros por 100g do preparo pronto.'}
             </Text>
             <Input
               value={description}
               onChangeText={setDescription}
-              placeholder="Ex: arroz integral cozido em água com 1 colher de azeite e sal"
+              placeholder={
+                isLiquid
+                  ? 'Ex: suco de laranja natural sem açúcar'
+                  : 'Ex: arroz integral cozido em água com 1 colher de azeite e sal'
+              }
               multiline
               numberOfLines={3}
               textAlignVertical="top"
@@ -159,12 +221,12 @@ export function PreparoEditorModal({ visible, editing, initialName, onClose, onS
             />
 
             <Input
-              label="Calorias (kcal/100g)"
+              label={`Calorias (kcal/${unitLabel})`}
               value={kcal}
               onChangeText={setKcal}
               keyboardType="numeric"
               error={errors.kcal}
-              placeholder="165"
+              placeholder={isLiquid ? '42' : '165'}
             />
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
               <View style={{ flex: 1 }}>
@@ -196,7 +258,7 @@ export function PreparoEditorModal({ visible, editing, initialName, onClose, onS
               </View>
             </View>
             <Input
-              label="Fibra (g/100g) — opcional"
+              label={`Fibra (g/${unitLabel}) — opcional`}
               value={fiber}
               onChangeText={setFiber}
               keyboardType="numeric"
@@ -240,4 +302,18 @@ const styles = StyleSheet.create({
   },
   helper: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm, lineHeight: 16 },
   btns: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  unitRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  unitChip: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+  },
+  unitChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  unitChipText: { color: colors.text, fontWeight: '600', fontSize: 13 },
+  unitChipTextActive: { color: colors.bg },
 });

@@ -7,14 +7,15 @@ export type FoodPatch = Partial<Omit<Food, 'id' | 'created_at' | 'source'>>;
 export async function createFood(f: NewFood): Promise<Food> {
   const db = await getDb();
   const r = await db.runAsync(
-    `INSERT INTO foods (name, kcal_per_100g, protein_g, carbs_g, fat_g, fiber_g, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO foods (name, kcal_per_100g, protein_g, carbs_g, fat_g, fiber_g, unit, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     f.name.trim(),
     f.kcal_per_100g,
     f.protein_g,
     f.carbs_g,
     f.fat_g,
     f.fiber_g ?? null,
+    f.unit,
     f.source
   );
   const created = await db.getFirstAsync<Food>('SELECT * FROM foods WHERE id = ?', r.lastInsertRowId);

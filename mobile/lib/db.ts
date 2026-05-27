@@ -146,6 +146,26 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX idx_intakes_med_day ON medication_intakes(medication_id, taken_at);
     `,
   },
+  {
+    // Líquidos (unidade ml em foods) + tabela de atividades físicas
+    version: 5,
+    sql: `
+      ALTER TABLE foods ADD COLUMN unit TEXT NOT NULL DEFAULT 'g';
+
+      CREATE TABLE activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        duration_min INTEGER NOT NULL,
+        distance_km REAL,
+        kcal INTEGER NOT NULL,
+        notes TEXT,
+        performed_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX idx_activities_user_day ON activities(user_id, performed_at);
+    `,
+  },
 ];
 
 async function applyMigrations(db: SQLite.SQLiteDatabase) {

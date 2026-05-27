@@ -9,6 +9,9 @@ export type ActivityLevel =
 
 export type MealType = 'breakfast' | 'lunch' | 'snack' | 'dinner';
 
+/** Unidade do preparo armazenado em `foods`. Sólido em gramas, líquido em mililitros. */
+export type FoodUnit = 'g' | 'ml';
+
 export type User = {
   id: number;
   email: string;
@@ -30,11 +33,17 @@ export type User = {
 export type Food = {
   id: number;
   name: string;
+  /**
+   * kcal por 100 unidades (100g pra sólidos, 100ml pra líquidos).
+   * O nome mantém `_per_100g` por compatibilidade com o schema antigo —
+   * pra líquidos lê-se como kcal/100ml. Densidade ≈ 1 g/ml é assumida pros cálculos.
+   */
   kcal_per_100g: number;
   protein_g: number;
   carbs_g: number;
   fat_g: number;
   fiber_g: number | null;
+  unit: FoodUnit;
   source: 'custom' | 'taco';
   created_at: string;
 };
@@ -128,6 +137,17 @@ export type MedicationIntake = {
   id: number;
   medication_id: number;
   taken_at: string;
+};
+
+export type Activity = {
+  id: number;
+  user_id: number;
+  name: string;
+  duration_min: number;
+  distance_km: number | null;
+  kcal: number;
+  notes: string | null;
+  performed_at: string;
 };
 
 export const ACTIVITY_FACTOR: Record<ActivityLevel, number> = {

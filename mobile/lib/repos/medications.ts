@@ -145,3 +145,23 @@ export async function deleteIntake(id: number): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM medication_intakes WHERE id = ?', id);
 }
+
+export type ReminderStatus = {
+  time: string;
+  taken: boolean;
+};
+
+/**
+ * Mapeia cada horário de lembrete pro status "tomado" hoje.
+ *
+ * Heurística simples: o N-ésimo horário (ordenado) é "tomado" se hoje já existem
+ * pelo menos N tomadas registradas. Não tenta casar tomada específica com horário —
+ * basta saber se o usuário cumpriu o cronograma na ordem.
+ */
+export function reminderStatuses(
+  reminderTimesRaw: string | null,
+  todayCount: number
+): ReminderStatus[] {
+  const times = parseReminderTimes(reminderTimesRaw).sort();
+  return times.map((time, idx) => ({ time, taken: idx < todayCount }));
+}
