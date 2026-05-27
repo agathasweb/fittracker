@@ -43,7 +43,7 @@ export default function ProgressScreen() {
 
       <Card title="Relatório semanal">
         <Text style={styles.helper}>
-          Gera um PDF com gráficos de calorias, hidratação, fibras e medicamentos dos
+          Gera um PDF com gráficos de calorias, hidratação, fibras e suplementos dos
           últimos 7 dias. Compartilhe por WhatsApp, e-mail ou outro app instalado.
         </Text>
         <Button

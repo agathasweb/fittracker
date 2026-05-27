@@ -65,7 +65,7 @@ export default function MedicationsScreen() {
 
   function confirmRemove(m: MedicationWithToday) {
     Alert.alert(
-      'Excluir medicamento',
+      'Excluir suplemento',
       `Remover "${m.name}" e todo o histórico? Lembretes agendados também serão cancelados.`,
       [
         { text: 'Cancelar', style: 'cancel' },
@@ -96,9 +96,10 @@ export default function MedicationsScreen() {
           <Card>
             <View style={{ alignItems: 'center', paddingVertical: spacing.md }}>
               <Ionicons name="medkit-outline" size={48} color={colors.textMuted} />
-              <Text style={styles.emptyTitle}>Nenhum remédio cadastrado</Text>
+              <Text style={styles.emptyTitle}>Nenhum suplemento cadastrado</Text>
               <Text style={styles.emptySub}>
-                Cadastre seus medicamentos pra registrar tomadas e (opcional) receber lembretes.
+                Cadastre seus suplementos e medicamentos de uso contínuo pra registrar tomadas e
+                (opcional) receber lembretes.
               </Text>
             </View>
           </Card>
@@ -267,7 +268,7 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
 
   async function save() {
     if (!name.trim()) {
-      Alert.alert('Informe o nome do medicamento.');
+      Alert.alert('Informe o nome do suplemento.');
       return;
     }
     setSaving(true);
@@ -315,20 +316,20 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
       >
         <View style={styles.modal}>
           <Text style={styles.modalTitle}>
-            {editing ? 'Editar medicamento' : 'Novo medicamento'}
+            {editing ? 'Editar suplemento' : 'Novo suplemento'}
           </Text>
           <ScrollView style={{ maxHeight: 480 }}>
             <Input
               label="Nome"
               value={name}
               onChangeText={setName}
-              placeholder='Ex.: "Losartana"'
+              placeholder='Ex.: "Whey protein" ou "Losartana"'
             />
             <Input
               label="Dosagem (opcional)"
               value={dosage}
               onChangeText={setDosage}
-              placeholder='Ex.: "50 mg"'
+              placeholder='Ex.: "30 g" ou "50 mg"'
             />
             <Input
               label="Observações (opcional)"
@@ -415,9 +416,10 @@ function IntakesHistoryModal({ med, onClose, onChanged }: HistoryProps) {
   }, [med]);
 
   // load on open
+  const currentMedId = med?.id ?? null;
   const [lastMedId, setLastMedId] = useState<number | null>(null);
-  if (med?.id !== lastMedId) {
-    setLastMedId(med?.id ?? null);
+  if (currentMedId !== lastMedId) {
+    setLastMedId(currentMedId);
     if (med) load();
   }
 

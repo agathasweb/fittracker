@@ -70,7 +70,7 @@ export type MealTemplate = {
   created_at: string;
 };
 
-/** Macros de um alimento ou preparo, normalizados. */
+/** Macros de um preparo, normalizados. */
 export type Macros = {
   kcal: number;
   protein_g: number;

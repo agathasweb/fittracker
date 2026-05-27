@@ -258,7 +258,7 @@ function buildHtml(user: User, days: DayData[]): string {
       <div class="hint">meta ${goalWater} ml</div>
     </div>
     <div class="stat">
-      <div class="label">Remédios</div>
+      <div class="label">Suplementos</div>
       <div class="value">${totalMedIntakes}</div>
       <div class="hint">tomadas na semana</div>
     </div>
@@ -276,7 +276,7 @@ function buildHtml(user: User, days: DayData[]): string {
   <h2>Fibras por dia</h2>
   <div class="chart">${barChartSVG(days, (d) => d.fiber, null, '#34D399', 'g')}</div>
 
-  <h2>Medicamentos por dia</h2>
+  <h2>Suplementos por dia</h2>
   <div class="chart">${barChartSVG(days, (d) => d.med_intakes, null, '#A78BFA', '')}</div>
 
   <div class="footer">

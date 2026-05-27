@@ -12,8 +12,10 @@ import {
 } from 'react-native';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { PreparoEditorModal } from '../../components/PreparoEditorModal';
 import { useAuth } from '../../lib/auth';
 import { formatTime, todayISO } from '../../lib/format';
+import { deleteFood, isFoodInUse, listFoods } from '../../lib/repos/foods';
 import {
   createMealFromTemplate,
   deleteMeal,
@@ -26,9 +28,9 @@ import {
   TemplateSummary,
 } from '../../lib/repos/mealTemplates';
 import { colors, radius, spacing } from '../../lib/theme';
-import { MEAL_TYPE_LABEL } from '../../lib/types';
+import { Food, MEAL_TYPE_LABEL } from '../../lib/types';
 
-type View_ = 'today' | 'templates';
+type View_ = 'today' | 'templates' | 'preparos';
 
 export default function MealsScreen() {
   const auth = useAuth();
@@ -38,16 +40,24 @@ export default function MealsScreen() {
   const [view, setView] = useState<View_>('today');
   const [meals, setMeals] = useState<MealWithSummary[]>([]);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [preparos, setPreparos] = useState<Food[]>([]);
   const [pickTplOpen, setPickTplOpen] = useState(false);
+  const [newMealMenuOpen, setNewMealMenuOpen] = useState(false);
+  const [preparoEditor, setPreparoEditor] = useState<{ open: boolean; editing: Food | null }>({
+    open: false,
+    editing: null,
+  });
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const [ms, ts] = await Promise.all([
+    const [ms, ts, ps] = await Promise.all([
       listMealsOfDay(userId, todayISO()),
       listTemplates(userId),
+      listFoods(500),
     ]);
     setMeals(ms);
     setTemplates(ts);
+    setPreparos(ps);
   }, [userId]);
 
   useFocusEffect(
@@ -92,6 +102,67 @@ export default function MealsScreen() {
     ]);
   }
 
+  function removePreparo(p: Food) {
+    Alert.alert(
+      'Excluir preparo',
+      `Excluir "${p.name}"? Se ele estiver em uso em alguma refeição padrão ou registrada, a exclusão será bloqueada.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            if (await isFoodInUse(p.id)) {
+              Alert.alert(
+                'Em uso',
+                'Esse preparo está sendo usado em refeições padrão ou registradas. Remova de lá antes de excluir.'
+              );
+              return;
+            }
+            await deleteFood(p.id);
+            await load();
+          },
+        },
+      ]
+    );
+  }
+
+  function openNewMealMenu() {
+    if (templates.length === 0 && preparos.length === 0) {
+      Alert.alert(
+        'Comece pelos preparos',
+        'Cadastre primeiro alguns preparos (ex.: arroz, frango grelhado) na aba "Preparos". Depois você pode montar refeições padrão ou avulsas.',
+        [
+          { text: 'Ir pra Preparos', onPress: () => setView('preparos') },
+          { text: 'Cancelar', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+    setNewMealMenuOpen(true);
+  }
+
+  function onFabPress() {
+    if (view === 'today') {
+      openNewMealMenu();
+    } else if (view === 'templates') {
+      if (preparos.length === 0) {
+        Alert.alert(
+          'Cadastre preparos antes',
+          'Uma refeição padrão é composta por preparos. Cadastre pelo menos um na aba "Preparos" primeiro.',
+          [
+            { text: 'Ir pra Preparos', onPress: () => setView('preparos') },
+            { text: 'Cancelar', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+      router.push('/meal-template/new');
+    } else {
+      setPreparoEditor({ open: true, editing: null });
+    }
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={styles.toggleRow}>
@@ -111,13 +182,21 @@ export default function MealsScreen() {
             Padrões
           </Text>
         </Pressable>
+        <Pressable
+          onPress={() => setView('preparos')}
+          style={[styles.toggle, view === 'preparos' && styles.toggleActive]}
+        >
+          <Text style={[styles.toggleText, view === 'preparos' && styles.toggleTextActive]}>
+            Preparos
+          </Text>
+        </Pressable>
       </View>
 
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
       >
-        {view === 'today' ? (
+        {view === 'today' && (
           meals.length === 0 ? (
             <Card>
               <Text style={styles.empty}>
@@ -147,77 +226,163 @@ export default function MealsScreen() {
                     </View>
                   </View>
                   <Text style={styles.mealMeta}>
-                    {formatTime(m.consumed_at)} · {m.item_count} item{m.item_count !== 1 ? 's' : ''}
+                    {formatTime(m.consumed_at)} · {m.item_count} preparo{m.item_count !== 1 ? 's' : ''}
                   </Text>
                 </Card>
               </Pressable>
             ))
           )
-        ) : templates.length === 0 ? (
-          <Card>
-            <Text style={styles.empty}>
-              Cadastre suas refeições mais frequentes pra lançá-las com um toque.
-            </Text>
-          </Card>
-        ) : (
-          templates.map((t) => (
-            <Pressable
-              key={t.id}
-              onPress={() => router.push(`/meal-template/${t.id}`)}
-              onLongPress={() => removeTemplate(t)}
-            >
-              <Card>
-                <View style={styles.mealHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.mealType}>{MEAL_TYPE_LABEL[t.meal_type]}</Text>
-                    <Text style={styles.mealName}>{t.name}</Text>
+        )}
+
+        {view === 'templates' && (
+          templates.length === 0 ? (
+            <Card>
+              <Text style={styles.empty}>
+                Cadastre suas refeições mais frequentes pra lançá-las com um toque.
+              </Text>
+            </Card>
+          ) : (
+            templates.map((t) => (
+              <Pressable
+                key={t.id}
+                onPress={() => router.push(`/meal-template/${t.id}`)}
+                onLongPress={() => removeTemplate(t)}
+              >
+                <Card>
+                  <View style={styles.mealHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.mealType}>{MEAL_TYPE_LABEL[t.meal_type]}</Text>
+                      <Text style={styles.mealName}>{t.name}</Text>
+                    </View>
+                    <View style={styles.mealActions}>
+                      <Text style={styles.mealKcal}>{Math.round(t.total_kcal)} kcal</Text>
+                      <Pressable
+                        onPress={() => removeTemplate(t)}
+                        style={styles.deleteBtn}
+                        hitSlop={8}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                      </Pressable>
+                    </View>
                   </View>
-                  <View style={styles.mealActions}>
-                    <Text style={styles.mealKcal}>{Math.round(t.total_kcal)} kcal</Text>
+                  <Text style={styles.mealMeta}>
+                    {t.item_count} preparo{t.item_count !== 1 ? 's' : ''} · toque para editar
+                  </Text>
+                </Card>
+              </Pressable>
+            ))
+          )
+        )}
+
+        {view === 'preparos' && (
+          preparos.length === 0 ? (
+            <Card>
+              <Text style={styles.empty}>
+                Cadastre seus preparos (ex.: "arroz integral cozido", "frango grelhado") com
+                macros por 100g. Pode descrever o preparo e deixar a IA estimar.
+              </Text>
+            </Card>
+          ) : (
+            preparos.map((p) => (
+              <Pressable
+                key={p.id}
+                onPress={() => setPreparoEditor({ open: true, editing: p })}
+                onLongPress={() => removePreparo(p)}
+              >
+                <Card>
+                  <View style={styles.mealHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.mealName}>{p.name}</Text>
+                      <Text style={styles.mealMeta}>
+                        {p.kcal_per_100g} kcal/100g · P {p.protein_g}g · C {p.carbs_g}g · G {p.fat_g}g
+                        {p.fiber_g !== null ? ` · F ${p.fiber_g}g` : ''}
+                      </Text>
+                    </View>
                     <Pressable
-                      onPress={() => removeTemplate(t)}
+                      onPress={() => removePreparo(p)}
                       style={styles.deleteBtn}
                       hitSlop={8}
                     >
                       <Ionicons name="trash-outline" size={18} color={colors.danger} />
                     </Pressable>
                   </View>
-                </View>
-                <Text style={styles.mealMeta}>
-                  {t.item_count} item{t.item_count !== 1 ? 's' : ''} · toque para editar
-                </Text>
-              </Card>
-            </Pressable>
-          ))
+                </Card>
+              </Pressable>
+            ))
+          )
         )}
       </ScrollView>
 
-      <Pressable
-        style={styles.fab}
-        onPress={() => {
-          if (view === 'today') {
-            if (templates.length === 0) {
-              Alert.alert(
-                'Sem refeições padrão',
-                'Cadastre primeiro uma refeição padrão pra poder lançar com um toque.',
-                [
-                  {
-                    text: 'Criar padrão',
-                    onPress: () => router.push('/meal-template/new'),
-                  },
-                  { text: 'Cancelar', style: 'cancel' },
-                ]
-              );
-              return;
-            }
-            setPickTplOpen(true);
-          } else {
-            router.push('/meal-template/new');
-          }
-        }}
-      >
+      <Pressable style={styles.fab} onPress={onFabPress}>
         <Ionicons name="add" size={28} color={colors.bg} />
       </Pressable>
+
+      <Modal
+        visible={newMealMenuOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setNewMealMenuOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Lançar refeição</Text>
+            <Text style={styles.modalSub}>Como você quer registrar?</Text>
+
+            <Pressable
+              onPress={() => {
+                setNewMealMenuOpen(false);
+                if (templates.length === 0) {
+                  Alert.alert(
+                    'Sem refeições padrão',
+                    'Cadastre primeiro uma refeição padrão na aba "Padrões" pra lançar com um toque.'
+                  );
+                  return;
+                }
+                setPickTplOpen(true);
+              }}
+              style={styles.menuRow}
+            >
+              <Ionicons name="albums-outline" size={22} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.menuTitle}>Usar uma refeição padrão</Text>
+                <Text style={styles.menuSub}>
+                  {templates.length} padr{templates.length === 1 ? 'ão' : 'ões'} cadastrad{templates.length === 1 ? 'a' : 'as'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                setNewMealMenuOpen(false);
+                if (preparos.length === 0) {
+                  Alert.alert(
+                    'Cadastre preparos antes',
+                    'Uma refeição avulsa também precisa de preparos. Cadastre na aba "Preparos" primeiro.'
+                  );
+                  return;
+                }
+                router.push('/ad-hoc-meal');
+              }}
+              style={styles.menuRow}
+            >
+              <Ionicons name="create-outline" size={22} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.menuTitle}>Refeição avulsa</Text>
+                <Text style={styles.menuSub}>Montar agora com preparos e gramaturas</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </Pressable>
+
+            <Button
+              title="Cancelar"
+              variant="secondary"
+              onPress={() => setNewMealMenuOpen(false)}
+              style={{ marginTop: spacing.md }}
+            />
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={pickTplOpen}
@@ -227,8 +392,8 @@ export default function MealsScreen() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Lançar refeição</Text>
-            <Text style={styles.modalSub}>Escolha uma das suas refeições padrão:</Text>
+            <Text style={styles.modalTitle}>Escolher padrão</Text>
+            <Text style={styles.modalSub}>Toque numa das suas refeições padrão:</Text>
             <ScrollView style={{ maxHeight: 360 }}>
               {templates.map((t) => (
                 <Pressable
@@ -253,6 +418,16 @@ export default function MealsScreen() {
           </View>
         </View>
       </Modal>
+
+      <PreparoEditorModal
+        visible={preparoEditor.open}
+        editing={preparoEditor.editing}
+        onClose={() => setPreparoEditor({ open: false, editing: null })}
+        onSaved={async () => {
+          setPreparoEditor({ open: false, editing: null });
+          await load();
+        }}
+      />
     </View>
   );
 }
@@ -359,6 +534,20 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: spacing.md,
   },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.bg,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+  },
+  menuTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  menuSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   tplPick: {
     flexDirection: 'row',
     alignItems: 'center',

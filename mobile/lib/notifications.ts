@@ -28,7 +28,7 @@ export async function ensurePermission(): Promise<boolean> {
 async function ensureAndroidChannel() {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync('medications', {
-    name: 'Lembretes de medicamento',
+    name: 'Lembretes de suplementos',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#A3E635',
@@ -82,7 +82,7 @@ export async function rescheduleMedicationReminders(
 ): Promise<string[]> {
   if (oldIds.length) await cancelNotifications(oldIds);
   if (!times.length) return [];
-  const title = 'Hora do remédio';
+  const title = 'Hora do suplemento';
   const body = dosage ? `${name} — ${dosage}` : name;
   const ids: string[] = [];
   for (const t of times) {

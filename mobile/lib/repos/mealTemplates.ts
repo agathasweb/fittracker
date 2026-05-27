@@ -142,7 +142,11 @@ export async function updateTemplate(id: number, patch: TemplatePatch): Promise<
   await db.runAsync(`UPDATE meal_templates SET ${set} WHERE id = ?`, ...values, id);
 }
 
-/** Converte um preparo manual em "composto por alimentos" zerando os macros próprios. */
+/**
+ * Limpa os macros manuais legados de um template (deixados pelo antigo modo "Preparo IA"
+ * que estimava a porção total). Templates novos só usam preparos compostos, então isso
+ * é chamado ao salvar pra normalizar templates antigos editados.
+ */
 export async function clearTemplateManualMacros(id: number): Promise<void> {
   const db = await getDb();
   await db.runAsync(

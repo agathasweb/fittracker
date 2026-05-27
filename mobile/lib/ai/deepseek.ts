@@ -31,24 +31,26 @@ export class DeepSeekError extends Error {
   }
 }
 
-const SYSTEM_PROMPT = `Você é um nutricionista que estima macros de preparações alimentares brasileiras.
+const SYSTEM_PROMPT_PER_100G = `Você é um nutricionista que estima macros de preparações alimentares brasileiras.
 Retorne SEMPRE um JSON único, sem markdown nem texto extra, com este formato exato:
 {"kcal": number, "protein_g": number, "carbs_g": number, "fat_g": number, "fiber_g": number}
 
 Regras:
-- Valores são para a PORÇÃO TOTAL descrita (não por 100g).
+- Valores são SEMPRE POR 100g do preparo pronto (kcal/100g, proteína g/100g, etc.).
 - Use a TACO (tabela brasileira) como referência quando aplicável.
-- Se uma quantidade não estiver clara, assuma porção média de uma pessoa adulta.
+- Considere o método de preparo descrito (cocção, óleo adicionado, etc.) — isso altera a densidade calórica final.
 - Não inclua comentários, unidades textuais ou campos extras — só os 5 campos numéricos.
 - Arredonde para 1 casa decimal.`;
 
 /**
- * Estima macros de um preparo a partir da descrição em texto livre.
+ * Estima macros POR 100g de um preparo a partir da descrição em texto livre.
  *
- * Exemplo de descrição: "100g de arroz integral, 80g de feijão preto cozido,
- * salada com 50g de alface, 30g de tomate, 1 colher de azeite".
+ * Exemplo de descrição: "Frango grelhado temperado com sal, alho e azeite — uso
+ * cerca de 1 colher de azeite pra cada peito de 200g".
+ *
+ * Retorna kcal/100g e macros/100g, prontos pra armazenar como um preparo (food) no banco.
  */
-export async function estimateMacros(description: string): Promise<Macros> {
+export async function estimatePreparoPer100g(description: string): Promise<Macros> {
   const key = await getApiKey();
   if (!key) {
     throw new DeepSeekError(
@@ -72,7 +74,7 @@ export async function estimateMacros(description: string): Promise<Macros> {
       body: JSON.stringify({
         model: MODEL,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: SYSTEM_PROMPT_PER_100G },
           { role: 'user', content: trimmed },
         ],
         temperature: 0.2,

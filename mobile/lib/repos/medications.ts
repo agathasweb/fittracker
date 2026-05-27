@@ -81,7 +81,7 @@ export async function createMedication(data: NewMedication): Promise<Medication>
     serializeStrArr(data.notification_ids)
   );
   const created = await getMedication(r.lastInsertRowId);
-  if (!created) throw new Error('Falha ao criar medicamento');
+  if (!created) throw new Error('Falha ao criar suplemento');
   return created;
 }
 
