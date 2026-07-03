@@ -26,6 +26,8 @@
     },
     "android": {
       "package": "com.agathasweb.fittracker",
+      "versionCode": 1,
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F172A"

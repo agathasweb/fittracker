@@ -8,3 +8,10 @@ data/
 *.pyc
 .DS_Store
 anotacoes.md
+
+# Config do Firebase (API key de cliente) — repo é público, não commitar.
+# O build EAS ainda inclui o arquivo via git init próprio do container (ver release-flow).
+mobile/google-services.json
+
+# Service account do Google Play (eas submit) — segredo, nunca commitar.
+mobile/play-service-account.json

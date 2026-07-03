@@ -1,13 +1,28 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { UpdateBanner } from '../../components/UpdateBanner';
 import { colors } from '../../lib/theme';
 import { useRequireAuth } from '../../lib/guards';
+import { registerForPushNotificationsAsync } from '../../lib/push';
 
 export default function TabsLayout() {
   const auth = useRequireAuth();
+
+  // Registra o device pra push remoto e reporta a instalação ao painel assim
+  // que o usuário está autenticado. Idempotente e silencioso em falha.
+  const authedUser = auth.status === 'authed' ? auth.user : null;
+  useEffect(() => {
+    if (authedUser) {
+      registerForPushNotificationsAsync({
+        userName: authedUser.name,
+        userEmail: authedUser.email,
+      });
+    }
+  }, [authedUser?.id]);
+
   if (auth.status !== 'authed') {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
