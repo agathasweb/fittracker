@@ -12,6 +12,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -22,6 +23,7 @@ import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
 import { logout, useAuth } from '../../lib/auth';
 import { ageFromBirth } from '../../lib/format';
+import { usePushToken } from '../../lib/push';
 import * as deepseek from '../../lib/ai/deepseek';
 import { updateUser } from '../../lib/repos/users';
 import { colors, radius, spacing } from '../../lib/theme';
@@ -182,6 +184,8 @@ export default function ProfileScreen() {
 
       <DeepSeekCard />
 
+      <PushTokenCard />
+
       <Card title="Conta">
         <MenuRow icon="log-out-outline" text="Sair" danger onPress={onLogout} />
       </Card>
@@ -296,6 +300,50 @@ function DeepSeekCard() {
   );
 }
 
+function PushTokenCard() {
+  const token = usePushToken();
+
+  async function shareToken() {
+    if (!token) return;
+    try {
+      await Share.share({ message: token });
+    } catch {
+      // usuário cancelou o compartilhamento — ignora
+    }
+  }
+
+  return (
+    <Card title="Notificações push">
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>Status</Text>
+        <Text
+          style={[styles.rowValue, { color: token ? colors.success : colors.textMuted }]}
+        >
+          {token ? 'Registrado' : 'Indisponível'}
+        </Text>
+      </View>
+      <Text style={styles.helperText}>
+        {token
+          ? 'Este dispositivo está registrado pra receber notificações. O token abaixo pode ser usado pra enviar um push de teste.'
+          : 'Push remoto só funciona no app instalado (APK/Play), não no Expo Go nem no preview web. Autorize as notificações quando o app pedir.'}
+      </Text>
+      {token && (
+        <>
+          <Text selectable style={styles.tokenText}>
+            {token}
+          </Text>
+          <Button
+            title="Compartilhar token"
+            variant="secondary"
+            onPress={shareToken}
+            style={{ marginTop: spacing.sm }}
+          />
+        </>
+      )}
+    </Card>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.row}>
@@ -386,6 +434,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: spacing.xs,
     lineHeight: 16,
+  },
+  tokenText: {
+    color: colors.text,
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    backgroundColor: colors.bg,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   modalBackdrop: {
     flex: 1,
