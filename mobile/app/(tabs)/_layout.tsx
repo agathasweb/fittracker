@@ -11,13 +11,17 @@ import { registerForPushNotificationsAsync } from '../../lib/push';
 export default function TabsLayout() {
   const auth = useRequireAuth();
 
-  // Registra o device pra push remoto assim que o usuário está autenticado.
-  // Idempotente e silencioso em falha (web / Expo Go / permissão negada).
+  // Registra o device pra push remoto e reporta a instalação ao painel assim
+  // que o usuário está autenticado. Idempotente e silencioso em falha.
+  const authedUser = auth.status === 'authed' ? auth.user : null;
   useEffect(() => {
-    if (auth.status === 'authed') {
-      registerForPushNotificationsAsync();
+    if (authedUser) {
+      registerForPushNotificationsAsync({
+        userName: authedUser.name,
+        userEmail: authedUser.email,
+      });
     }
-  }, [auth.status]);
+  }, [authedUser?.id]);
 
   if (auth.status !== 'authed') {
     return (
