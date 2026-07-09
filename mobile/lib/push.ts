@@ -4,16 +4,12 @@ import * as Crypto from 'expo-crypto';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
+// Painel que coleta as instalações (endpoint POST /api/push/register).
+import { PANEL_BASE_URL } from './config';
 import { ensurePermission } from './notifications';
 
 const TOKEN_KEY = '@fittracker/expo_push_token';
 const INSTALL_ID_KEY = '@fittracker/install_id';
-
-/**
- * Painel que coleta as instalações (endpoint POST /api/push/register).
- * TODO: trocar pra https://fittracker.agathasweb.com antes do release na Play.
- */
-const PANEL_BASE_URL = 'https://fittracker-dev.agathasweb.com';
 
 /**
  * O projectId do EAS, necessário pra `getExpoPushTokenAsync` em SDK 49+.

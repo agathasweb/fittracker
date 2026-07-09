@@ -1,8 +1,9 @@
-import { Link, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,7 +14,7 @@ import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
 import { Logo } from '../../components/Logo';
 import { OptionPicker } from '../../components/OptionPicker';
-import { register } from '../../lib/auth';
+import { completarPerfil, getPendingProfile, logout } from '../../lib/auth';
 import { brDateToISO, maskBrDate } from '../../lib/format';
 import { colors, spacing } from '../../lib/theme';
 import {
@@ -44,9 +45,9 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
 
+  // E-mail e nome vêm do painel (o servidor já autenticou). A senha não é mais
+  // definida aqui — ela foi criada no checkout e vive só no servidor.
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [passwordConfirm, setPasswordConfirm] = useState('');
   const [name, setName] = useState('');
   const [sex, setSex] = useState<Sex | null>(null);
   const [birthDate, setBirthDate] = useState('');
@@ -56,6 +57,19 @@ export default function Register() {
   const [activity, setActivity] = useState<ActivityLevel | null>(null);
   const [waterGoal, setWaterGoal] = useState('');
   const [waterTouched, setWaterTouched] = useState(false);
+
+  // Sem perfil pendente ninguém deveria estar aqui — a raiz manda pro login.
+  useEffect(() => {
+    (async () => {
+      const pending = await getPendingProfile();
+      if (!pending) {
+        router.replace('/');
+        return;
+      }
+      setEmail(pending.email);
+      setName((atual) => atual || pending.name);
+    })();
+  }, [router]);
 
   function onWeightChange(v: string) {
     setCurrentWeight(v);
@@ -79,9 +93,6 @@ export default function Register() {
 
   function validate(): Errors {
     const e: Errors = {};
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email = 'E-mail inválido';
-    if (password.length < 6) e.password = 'Mínimo 6 caracteres';
-    if (passwordConfirm !== password) e.passwordConfirm = 'Senhas não coincidem';
     if (!name.trim()) e.name = 'Informe seu nome';
     if (!sex) e.sex = 'Selecione';
     if (!brDateToISO(birthDate)) e.birthDate = 'Use dd/mm/aaaa';
@@ -103,9 +114,8 @@ export default function Register() {
     if (Object.keys(e).length) return;
     setSubmitting(true);
     try {
-      await register({
+      await completarPerfil({
         email,
-        password,
         name,
         sex: sex!,
         birth_date: brDateToISO(birthDate)!,
@@ -117,7 +127,7 @@ export default function Register() {
       });
       router.replace('/');
     } catch (err: any) {
-      setErrors({ form: err?.message ?? 'Erro ao criar conta' });
+      setErrors({ form: err?.message ?? 'Erro ao salvar o perfil' });
     } finally {
       setSubmitting(false);
     }
@@ -134,37 +144,9 @@ export default function Register() {
         </View>
         <Text style={styles.title}>Vamos te conhecer</Text>
         <Text style={styles.subtitle}>
-          Esses dados ficam só no seu aparelho e são usados pros cálculos de meta e progresso.
+          Assinatura confirmada para {email}. Esses dados ficam só no seu aparelho e são
+          usados pros cálculos de meta e progresso.
         </Text>
-
-        <Card title="Acesso">
-          <Input
-            label="E-mail"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            error={errors.email}
-            placeholder="voce@exemplo.com"
-          />
-          <Input
-            label="Senha"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            error={errors.password}
-            placeholder="Mínimo 6 caracteres"
-          />
-          <Input
-            label="Repetir senha"
-            value={passwordConfirm}
-            onChangeText={setPasswordConfirm}
-            secureTextEntry
-            error={errors.passwordConfirm}
-            placeholder="Digite novamente"
-          />
-        </Card>
 
         <Card title="Perfil">
           <Input
@@ -254,13 +236,18 @@ export default function Register() {
 
         {errors.form && <Text style={styles.formError}>{errors.form}</Text>}
 
-        <Button title="Criar conta" onPress={onSubmit} loading={submitting} />
+        <Button title="Salvar perfil" onPress={onSubmit} loading={submitting} />
 
         <View style={styles.loginRow}>
-          <Text style={styles.loginHint}>Já tem conta?</Text>
-          <Link href="/auth/login" replace style={styles.loginLink}>
-            Entrar
-          </Link>
+          <Text style={styles.loginHint}>Não é você?</Text>
+          <Pressable
+            onPress={async () => {
+              await logout();
+              router.replace('/auth/login');
+            }}
+          >
+            <Text style={styles.loginLink}>Entrar com outra conta</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
