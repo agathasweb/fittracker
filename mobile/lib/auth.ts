@@ -79,6 +79,21 @@ export async function getPendingProfile(): Promise<PendingProfile | null> {
   }
 }
 
+/**
+ * Depois de restaurar um backup, o perfil do usuário já existe no SQLite.
+ * Aponta a sessão pra ele em vez de mandar o usuário preencher tudo de novo.
+ * Retorna false se o backup não tinha esse e-mail (aí resta completar o perfil).
+ */
+export async function adotarPerfilLocal(email: string): Promise<boolean> {
+  const local = await getUserByEmail(email);
+  if (!local) return false;
+
+  await AsyncStorage.setItem(SESSION_KEY, String(local.id));
+  await AsyncStorage.removeItem(PENDING_KEY);
+  notify();
+  return true;
+}
+
 /** Cria o perfil local depois que o servidor já autenticou. Não pede senha. */
 export async function completarPerfil(
   dados: Omit<NewUser, 'password_hash'>

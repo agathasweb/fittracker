@@ -211,3 +211,26 @@ export async function resetDb(): Promise<void> {
   _initPromise = null;
   await SQLite.deleteDatabaseAsync(DB_NAME);
 }
+
+/** Caminho do arquivo no disco. O backup copia/substitui exatamente este arquivo. */
+export const DB_FILE_NAME = DB_NAME;
+
+/**
+ * Fecha a conexão e joga o WAL pra dentro do arquivo principal.
+ *
+ * Sem o checkpoint, escritas recentes ficam só no `-wal` e o backup sairia
+ * desatualizado. Sem fechar, restaurar por baixo de uma conexão aberta corrompe
+ * o banco. O próximo `getDb()` reabre e reaplica as migrations.
+ */
+export async function closeDb(): Promise<void> {
+  if (_db) {
+    try {
+      await _db.execAsync('PRAGMA wal_checkpoint(TRUNCATE);');
+    } catch {
+      // Banco pode não estar em WAL — seguir mesmo assim.
+    }
+    await _db.closeAsync();
+    _db = null;
+  }
+  _initPromise = null;
+}

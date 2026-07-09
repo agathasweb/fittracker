@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,7 +15,9 @@ import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
 import { Logo } from '../../components/Logo';
 import { OptionPicker } from '../../components/OptionPicker';
-import { completarPerfil, getPendingProfile, logout } from '../../lib/auth';
+import { BackupMeta } from '../../lib/api';
+import { adotarPerfilLocal, completarPerfil, getPendingProfile, logout } from '../../lib/auth';
+import { backupDisponivel, restaurarBackup } from '../../lib/backup';
 import { brDateToISO, maskBrDate } from '../../lib/format';
 import { colors, spacing } from '../../lib/theme';
 import {
@@ -58,6 +61,9 @@ export default function Register() {
   const [waterGoal, setWaterGoal] = useState('');
   const [waterTouched, setWaterTouched] = useState(false);
 
+  const [backup, setBackup] = useState<BackupMeta | null>(null);
+  const [restaurando, setRestaurando] = useState(false);
+
   // Sem perfil pendente ninguém deveria estar aqui — a raiz manda pro login.
   useEffect(() => {
     (async () => {
@@ -68,8 +74,45 @@ export default function Register() {
       }
       setEmail(pending.email);
       setName((atual) => atual || pending.name);
+
+      // Instalação nova de quem já usava o app: em vez de recomeçar do zero,
+      // oferecer o histórico que está no painel.
+      setBackup(await backupDisponivel());
     })();
   }, [router]);
+
+  function onRestaurar() {
+    Alert.alert(
+      'Restaurar seus dados?',
+      'Vamos trazer o histórico do seu último backup para este aparelho.',
+      [
+        { text: 'Agora não', style: 'cancel' },
+        {
+          text: 'Restaurar',
+          onPress: async () => {
+            setRestaurando(true);
+            try {
+              await restaurarBackup();
+              // O backup traz o perfil junto. Sem apontar a sessão pra ele, a raiz
+              // devolveria o usuário pra esta tela num laço.
+              const adotado = await adotarPerfilLocal(email);
+              if (adotado) {
+                router.replace('/');
+              } else {
+                setErrors({
+                  form: 'O backup restaurado não tem o perfil deste e-mail. Complete os dados abaixo.',
+                });
+              }
+            } catch (e: any) {
+              setErrors({ form: e?.message ?? 'Não foi possível restaurar o backup.' });
+            } finally {
+              setRestaurando(false);
+            }
+          },
+        },
+      ]
+    );
+  }
 
   function onWeightChange(v: string) {
     setCurrentWeight(v);
@@ -147,6 +190,20 @@ export default function Register() {
           Assinatura confirmada para {email}. Esses dados ficam só no seu aparelho e são
           usados pros cálculos de meta e progresso.
         </Text>
+
+        {backup && (
+          <Card title="Encontramos um backup seu">
+            <Text style={styles.subtitle}>
+              Último backup em {new Date(backup.created_at).toLocaleString('pt-BR')}.
+              Restaure para trazer todo o seu histórico de volta, em vez de começar do zero.
+            </Text>
+            <Button
+              title="Restaurar meus dados"
+              onPress={onRestaurar}
+              loading={restaurando}
+            />
+          </Card>
+        )}
 
         <Card title="Perfil">
           <Input

@@ -98,6 +98,28 @@ export async function apiMe(token: string): Promise<ApiUser> {
   return corpo.user;
 }
 
+export type BackupMeta = {
+  id: number;
+  size_bytes: number;
+  sha256: string;
+  created_at: string;
+};
+
+/** Chave AES do usuário. 403 quando o backup não está liberado pra conta (piloto). */
+export async function apiBackupKey(token: string): Promise<string> {
+  const corpo = await request('/api/backup/key', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return corpo.key;
+}
+
+export async function apiBackupLatest(token: string): Promise<BackupMeta | null> {
+  const corpo = await request('/api/backup/latest', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return corpo.backup ?? null;
+}
+
 export async function apiLogout(token: string): Promise<void> {
   try {
     await request('/api/auth/logout', {

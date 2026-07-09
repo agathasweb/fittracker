@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActionSheetIOS,
   Alert,
@@ -21,7 +21,10 @@ import {
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
+import { apiBackupKey } from '../../lib/api';
 import { logout, useAuth } from '../../lib/auth';
+import { backupDisponivel, fazerBackup, restaurarBackup } from '../../lib/backup';
+import { getToken } from '../../lib/entitlement';
 import { ageFromBirth } from '../../lib/format';
 import { usePushToken } from '../../lib/push';
 import * as deepseek from '../../lib/ai/deepseek';
@@ -186,6 +189,8 @@ export default function ProfileScreen() {
 
       <PushTokenCard />
 
+      <BackupCard />
+
       <Card title="Conta">
         <MenuRow icon="log-out-outline" text="Sair" danger onPress={onLogout} />
       </Card>
@@ -296,6 +301,101 @@ function DeepSeekCard() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+    </Card>
+  );
+}
+
+/**
+ * Backup cifrado no painel. Piloto: contas cortesia — para as demais o servidor
+ * devolve 403 e o cartão nem aparece, em vez de mostrar um botão que sempre falha.
+ */
+function BackupCard() {
+  const [meta, setMeta] = useState<Awaited<ReturnType<typeof backupDisponivel>>>(null);
+  const [disponivel, setDisponivel] = useState(false);
+  const [ocupado, setOcupado] = useState(false);
+
+  const recarregar = useCallback(async () => {
+    const token = await getToken();
+    if (!token) return;
+    try {
+      await apiBackupKey(token); // 403 => fora do piloto
+      setDisponivel(true);
+      setMeta(await backupDisponivel());
+    } catch {
+      setDisponivel(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    recarregar();
+  }, [recarregar]);
+
+  if (!disponivel) return null;
+
+  async function onBackup() {
+    setOcupado(true);
+    try {
+      const r = await fazerBackup();
+      if (r.status === 'feito') {
+        Alert.alert('Backup concluído', 'Seus dados foram salvos com segurança.');
+        await recarregar();
+      } else if (r.motivo === 'sem_rede') {
+        Alert.alert('Sem conexão', 'Conecte-se à internet e tente de novo.');
+      } else {
+        Alert.alert('Backup não realizado', 'Tente novamente mais tarde.');
+      }
+    } catch (e: any) {
+      Alert.alert('Erro no backup', e?.message ?? 'Tente novamente.');
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  function onRestaurar() {
+    Alert.alert(
+      'Restaurar backup?',
+      'Todos os dados atuais neste aparelho serão SUBSTITUÍDOS pelo backup mais recente. Isso não pode ser desfeito.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Restaurar',
+          style: 'destructive',
+          onPress: async () => {
+            setOcupado(true);
+            try {
+              await restaurarBackup();
+              Alert.alert('Backup restaurado', 'Abra o app novamente para ver seus dados.');
+            } catch (e: any) {
+              Alert.alert('Falha ao restaurar', e?.message ?? 'Tente novamente.');
+            } finally {
+              setOcupado(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  const quando = meta
+    ? new Date(meta.created_at).toLocaleString('pt-BR')
+    : 'nenhum backup ainda';
+
+  return (
+    <Card title="Backup">
+      <Row label="Último backup" value={quando} />
+      <MenuRow
+        icon="cloud-upload-outline"
+        text={ocupado ? 'Aguarde…' : 'Fazer backup agora'}
+        onPress={ocupado ? () => {} : onBackup}
+      />
+      {meta && (
+        <MenuRow
+          icon="cloud-download-outline"
+          text="Restaurar backup"
+          danger
+          onPress={ocupado ? () => {} : onRestaurar}
+        />
+      )}
     </Card>
   );
 }
