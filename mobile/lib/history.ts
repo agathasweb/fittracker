@@ -174,7 +174,7 @@ export function addDaysISO(iso: string, n: number): string {
   dt.setUTCDate(dt.getUTCDate() + n);
   return fromDate(dt);
 }
-function mondayOf(iso: string): string {
+export function mondayOf(iso: string): string {
   const dt = toDate(iso);
   const dow = (dt.getUTCDay() + 6) % 7; // 0 = segunda
   dt.setUTCDate(dt.getUTCDate() - dow);
