@@ -13,8 +13,10 @@ export type DayRecord = {
   date: string; // yyyy-MM-dd
   hydration_ml: number;
   meals_kcal: number;
-  workout_sets: number;
-  supplement_intakes: number;
+  meals_count: number;
+  workout_kcal: number; // calorias gastas no dia (atividades/cardio)
+  supp_consumed: number; // doses tomadas
+  supp_expected: number; // doses agendadas (meta do dia)
   hasData: boolean;
 };
 
@@ -47,6 +49,7 @@ export async function firstActivityDate(userId: number): Promise<string | null> 
     `SELECT MIN(d) AS d FROM (
         SELECT MIN(date(consumed_at)) d FROM hydration_entries WHERE user_id = ?1
         UNION ALL SELECT MIN(date(consumed_at)) FROM meals WHERE user_id = ?1
+        UNION ALL SELECT MIN(date(performed_at)) FROM activities WHERE user_id = ?1
         UNION ALL SELECT MIN(date(performed_at)) FROM workout_sessions WHERE user_id = ?1
         UNION ALL SELECT MIN(date(i.taken_at)) FROM medication_intakes i
                   JOIN medications m ON m.id = i.medication_id WHERE m.user_id = ?1
@@ -54,6 +57,35 @@ export async function firstActivityDate(userId: number): Promise<string | null> 
     userId
   );
   return row?.d ?? null;
+}
+
+/**
+ * Doses agendadas por dia (a "meta"). Aproximação: usa os suplementos ativos hoje
+ * e seus horários atuais, contando a partir de quando cada um foi criado — não há
+ * histórico de mudança de horário/ativação. Bom o suficiente pra "bateu a meta?".
+ */
+async function expectedDosesByDay(userId: number): Promise<
+  { created: string; times: number }[]
+> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ created_at: string; reminder_times: string | null }>(
+    'SELECT created_at, reminder_times FROM medications WHERE user_id = ? AND active = 1',
+    userId
+  );
+  return rows.map((r) => ({
+    created: r.created_at.slice(0, 10),
+    times: contarHorarios(r.reminder_times),
+  }));
+}
+
+function contarHorarios(raw: string | null): number {
+  if (!raw) return 0;
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.length : 0;
+  } catch {
+    return 0;
+  }
 }
 
 /** Registros diários no intervalo [startISO, endISO], já com os furos preenchidos. */
@@ -91,16 +123,20 @@ export async function dailyRecords(
     userId, startISO, endISO
   );
 
-  const treinos = await porDia(
-    `SELECT date(s.performed_at) d, COALESCE(SUM(ss.done), 0) v
-       FROM workout_sessions s
-       LEFT JOIN workout_session_sets ss ON ss.session_id = s.id
-      WHERE s.user_id = ? AND date(s.performed_at) BETWEEN ? AND ?
-      GROUP BY d`,
+  const refeicoesQtd = await porDia(
+    `SELECT date(consumed_at) d, COUNT(*) v FROM meals
+      WHERE user_id = ? AND date(consumed_at) BETWEEN ? AND ? GROUP BY d`,
     userId, startISO, endISO
   );
 
-  const suplementos = await porDia(
+  // Treinos = calorias gastas (atividades/cardio).
+  const caloriasGastas = await porDia(
+    `SELECT date(performed_at) d, SUM(kcal) v FROM activities
+      WHERE user_id = ? AND date(performed_at) BETWEEN ? AND ? GROUP BY d`,
+    userId, startISO, endISO
+  );
+
+  const dosesTomadas = await porDia(
     `SELECT date(i.taken_at) d, COUNT(*) v
        FROM medication_intakes i
        JOIN medications m ON m.id = i.medication_id
@@ -109,19 +145,32 @@ export async function dailyRecords(
     userId, startISO, endISO
   );
 
+  const suplementosAtivos = await expectedDosesByDay(userId);
+
   const out: DayRecord[] = [];
   for (const date of eachDayISO(startISO, endISO)) {
     const hydration_ml = Math.round(hidratacao.get(date) ?? 0);
     const meals_kcal = Math.round((kcalItens.get(date) ?? 0) + (kcalManual.get(date) ?? 0));
-    const workout_sets = Math.round(treinos.get(date) ?? 0);
-    const supplement_intakes = Math.round(suplementos.get(date) ?? 0);
+    const meals_count = Math.round(refeicoesQtd.get(date) ?? 0);
+    const workout_kcal = Math.round(caloriasGastas.get(date) ?? 0);
+    const supp_consumed = Math.round(dosesTomadas.get(date) ?? 0);
+    // Meta do dia: doses agendadas dos suplementos que já existiam nesse dia.
+    const supp_expected = suplementosAtivos
+      .filter((s) => s.created <= date)
+      .reduce((acc, s) => acc + s.times, 0);
     out.push({
       date,
       hydration_ml,
       meals_kcal,
-      workout_sets,
-      supplement_intakes,
-      hasData: hydration_ml > 0 || meals_kcal > 0 || workout_sets > 0 || supplement_intakes > 0,
+      meals_count,
+      workout_kcal,
+      supp_consumed,
+      supp_expected,
+      hasData:
+        hydration_ml > 0 ||
+        meals_count > 0 ||
+        workout_kcal > 0 ||
+        supp_consumed > 0,
     });
   }
   return out;
@@ -147,8 +196,10 @@ export function groupByWeek(records: DayRecord[]): WeekBlock[] {
           date,
           hydration_ml: 0,
           meals_kcal: 0,
-          workout_sets: 0,
-          supplement_intakes: 0,
+          meals_count: 0,
+          workout_kcal: 0,
+          supp_consumed: 0,
+          supp_expected: 0,
           hasData: false,
         }
       );

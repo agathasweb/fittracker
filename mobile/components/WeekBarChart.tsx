@@ -6,10 +6,13 @@ export type DayBar = {
   label: string; // S T Q Q S S D
   value: number;
   hasData: boolean;
+  annotation?: string | null; // texto pequeno sobre a barra (ex.: "3" refeições, "2/3" doses)
+  hit?: boolean; // destaca a anotação (ex.: meta batida no dia)
 };
 
 type Props = {
   title: string;
+  subtitle?: string; // sobrescreve o padrão "X/7 dias · unit"
   unit: string;
   days: DayBar[]; // exatamente 7 (seg→dom)
   color: string;
@@ -20,24 +23,36 @@ const H = 64;
 const GAP = 4;
 
 /**
- * Barras dos 7 dias de uma semana para um domínio (hidratação, refeições…).
+ * Barras dos 7 dias de uma semana para um domínio.
  *
  * Dias sem registro (furos) NÃO são barra zero — são um contorno tracejado,
- * pra ficar visível que faltou lançar (e não que o valor foi zero). Essa
- * distinção é o ponto do painel.
+ * pra ficar visível que faltou lançar (e não que o valor foi zero).
  */
-export function WeekBarChart({ title, unit, days, color, goal }: Props) {
+export function WeekBarChart({ title, subtitle, unit, days, color, goal }: Props) {
   const max = Math.max(goal ?? 0, ...days.map((d) => d.value), 1);
   const totalUnits = days.filter((d) => d.hasData).length;
+  const temAnotacao = days.some((d) => d.annotation);
 
   return (
     <View style={styles.wrap}>
       <View style={styles.header}>
         <Text style={styles.title}>{title}</Text>
-        <Text style={styles.sub}>
-          {totalUnits}/7 dias{unit ? ` · ${unit}` : ''}
-        </Text>
+        <Text style={styles.sub}>{subtitle ?? `${totalUnits}/7 dias${unit ? ` · ${unit}` : ''}`}</Text>
       </View>
+
+      {temAnotacao && (
+        <View style={styles.annRow}>
+          {days.map((d, i) => (
+            <Text
+              key={i}
+              style={[styles.ann, d.hit ? styles.annHit : null]}
+              numberOfLines={1}
+            >
+              {d.hasData ? d.annotation ?? '' : ''}
+            </Text>
+          ))}
+        </View>
+      )}
 
       <Svg width="100%" height={H} viewBox={`0 0 100 ${H}`} preserveAspectRatio="none">
         {goal ? (
@@ -55,7 +70,6 @@ export function WeekBarChart({ title, unit, days, color, goal }: Props) {
           const bw = (100 - GAP * 6) / 7;
           const x = i * (bw + GAP);
           if (!d.hasData) {
-            // furo: contorno tracejado de altura fixa baixa
             return (
               <Rect
                 key={i}
@@ -92,6 +106,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 },
   title: { color: colors.text, fontSize: 13, fontWeight: '700' },
   sub: { color: colors.textMuted, fontSize: 11 },
+  annRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2, paddingHorizontal: 1 },
+  ann: { color: colors.textMuted, fontSize: 9, width: `${100 / 7}%`, textAlign: 'center' },
+  annHit: { color: colors.primary, fontWeight: '700' },
   labels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2, paddingHorizontal: 1 },
   dayLabel: { color: colors.textMuted, fontSize: 9, width: `${100 / 7}%`, textAlign: 'center' },
   dayLabelGap: { color: colors.border },

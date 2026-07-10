@@ -107,12 +107,42 @@ export default function ProgressScreen() {
   const naSemanaAtual = refMonday === thisMonday;
   const podeVoltar = firstMonday ? (refMonday ?? thisMonday) > firstMonday : true;
 
-  const barra = (pick: (d: WeekBlock['days'][number]) => number): DayBar[] =>
-    (week?.days ?? []).map((d, i) => ({
+  const dias = week?.days ?? [];
+
+  const hidratacao: DayBar[] = dias.map((d, i) => ({
+    label: DOW[i],
+    value: d.hydration_ml,
+    hasData: d.hasData && d.hydration_ml > 0,
+  }));
+
+  const refeicoes: DayBar[] = dias.map((d, i) => ({
+    label: DOW[i],
+    value: d.meals_kcal,
+    hasData: d.hasData && d.meals_count > 0,
+    // nº de refeições no topo, kcal na barra
+    annotation: d.meals_count > 0 ? `${d.meals_count}✕` : null,
+  }));
+
+  const treinos: DayBar[] = dias.map((d, i) => ({
+    label: DOW[i],
+    value: d.workout_kcal,
+    hasData: d.hasData && d.workout_kcal > 0,
+  }));
+
+  // Suplementos: barra = doses tomadas; anotação = tomadas/agendadas; destaca o dia que bateu a meta.
+  const suplementos: DayBar[] = dias.map((d, i) => {
+    const bateu = d.supp_expected > 0 && d.supp_consumed >= d.supp_expected;
+    return {
       label: DOW[i],
-      value: pick(d),
-      hasData: d.hasData && pick(d) > 0,
-    }));
+      value: d.supp_consumed,
+      hasData: d.hasData && (d.supp_consumed > 0 || d.supp_expected > 0),
+      annotation: d.supp_expected > 0 ? `${d.supp_consumed}/${d.supp_expected}` : String(d.supp_consumed),
+      hit: bateu,
+    };
+  });
+
+  const diasMeta = dias.filter((d) => d.supp_expected > 0 && d.supp_consumed >= d.supp_expected).length;
+  const diasComSupp = dias.filter((d) => d.supp_expected > 0).length;
 
   return (
     <ScrollView
@@ -176,10 +206,16 @@ export default function ProgressScreen() {
           </View>
         ) : (
           <>
-            <WeekBarChart title="Hidratação" unit="ml/dia" days={barra((d) => d.hydration_ml)} color="#38BDF8" goal={goalWater} />
-            <WeekBarChart title="Refeições" unit="kcal/dia" days={barra((d) => d.meals_kcal)} color={colors.primary} goal={goalKcal} />
-            <WeekBarChart title="Treinos" unit="séries feitas" days={barra((d) => d.workout_sets)} color="#A78BFA" />
-            <WeekBarChart title="Suplementos" unit="tomadas" days={barra((d) => d.supplement_intakes)} color="#FB923C" />
+            <WeekBarChart title="Hidratação" unit="ml/dia" days={hidratacao} color="#38BDF8" goal={goalWater} />
+            <WeekBarChart title="Refeições" unit="kcal/dia" days={refeicoes} color={colors.primary} goal={goalKcal} subtitle="nº de refeições · kcal/dia" />
+            <WeekBarChart title="Treinos" unit="kcal gastas/dia" days={treinos} color="#A78BFA" />
+            <WeekBarChart
+              title="Suplementos"
+              unit="tomadas"
+              days={suplementos}
+              color="#FB923C"
+              subtitle={diasComSupp > 0 ? `meta batida em ${diasMeta}/${diasComSupp} dias` : 'sem suplementos agendados'}
+            />
           </>
         )}
       </Card>
