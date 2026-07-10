@@ -183,6 +183,7 @@ export type WorkoutSession = {
   notes: string | null;
   performed_at: string;
   created_at: string;
+  estimated_kcal: number | null;
 };
 
 export type WorkoutSessionSet = {

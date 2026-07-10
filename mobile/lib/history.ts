@@ -129,9 +129,14 @@ export async function dailyRecords(
     userId, startISO, endISO
   );
 
-  // Treinos = calorias gastas (atividades/cardio).
-  const caloriasGastas = await porDia(
+  // Treinos = calorias gastas: cardio (activities) + musculação (estimativa IA da sessão).
+  const kcalCardio = await porDia(
     `SELECT date(performed_at) d, SUM(kcal) v FROM activities
+      WHERE user_id = ? AND date(performed_at) BETWEEN ? AND ? GROUP BY d`,
+    userId, startISO, endISO
+  );
+  const kcalMusculacao = await porDia(
+    `SELECT date(performed_at) d, SUM(COALESCE(estimated_kcal, 0)) v FROM workout_sessions
       WHERE user_id = ? AND date(performed_at) BETWEEN ? AND ? GROUP BY d`,
     userId, startISO, endISO
   );
@@ -152,7 +157,7 @@ export async function dailyRecords(
     const hydration_ml = Math.round(hidratacao.get(date) ?? 0);
     const meals_kcal = Math.round((kcalItens.get(date) ?? 0) + (kcalManual.get(date) ?? 0));
     const meals_count = Math.round(refeicoesQtd.get(date) ?? 0);
-    const workout_kcal = Math.round(caloriasGastas.get(date) ?? 0);
+    const workout_kcal = Math.round((kcalCardio.get(date) ?? 0) + (kcalMusculacao.get(date) ?? 0));
     const supp_consumed = Math.round(dosesTomadas.get(date) ?? 0);
     // Meta do dia: doses agendadas dos suplementos que já existiam nesse dia.
     const supp_expected = suplementosAtivos

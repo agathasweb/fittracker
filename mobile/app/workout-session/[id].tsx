@@ -13,11 +13,14 @@ import {
   View,
 } from 'react-native';
 import { Card } from '../../components/Card';
+import { useAuth } from '../../lib/auth';
+import { DeepSeekError, estimateWorkoutCalories, hasApiKey } from '../../lib/ai/deepseek';
 import {
   addSetToExercise,
   deleteSession,
   deleteSet,
   getSessionFull,
+  setSessionKcal,
   updateSet,
 } from '../../lib/repos/workoutSessions';
 import { colors, radius, spacing } from '../../lib/theme';
@@ -27,6 +30,8 @@ export default function WorkoutSessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const sessionId = Number(id);
   const router = useRouter();
+  const auth = useAuth();
+  const [estimando, setEstimando] = useState(false);
 
   const [session, setSession] = useState<WorkoutSessionFull | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +62,57 @@ export default function WorkoutSessionScreen() {
     const t = texto.replace(',', '.').trim();
     const n = t === '' ? null : parseFloat(t);
     await updateSet(set.id, { load_kg: Number.isNaN(n as number) ? null : n });
+  }
+
+  async function concluir() {
+    if (!session || auth.status !== 'authed') {
+      router.back();
+      return;
+    }
+
+    // Resumo dos exercícios com pelo menos uma série feita.
+    const exercises = session.exercises
+      .map((ex) => {
+        const feitas = ex.sets.filter((s) => s.done);
+        if (feitas.length === 0) return null;
+        return {
+          name: ex.name,
+          sets: feitas.length,
+          reps: Math.max(0, ...feitas.map((s) => s.reps ?? 0)) || null,
+          load_kg: Math.max(0, ...feitas.map((s) => s.load_kg ?? 0)) || null,
+        };
+      })
+      .filter((e): e is NonNullable<typeof e> => e !== null);
+
+    if (exercises.length === 0) {
+      router.back(); // nada concluído — não há o que estimar
+      return;
+    }
+
+    if (!(await hasApiKey())) {
+      Alert.alert(
+        'Estimar calorias',
+        'Para estimar o gasto calórico da musculação com IA, cadastre sua chave DeepSeek no Perfil. O treino foi salvo mesmo assim.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+      return;
+    }
+
+    setEstimando(true);
+    try {
+      const kcal = await estimateWorkoutCalories(auth.user, { name: session.name, exercises });
+      await setSessionKcal(sessionId, kcal);
+      Alert.alert('Treino concluído', `Gasto estimado: ${kcal} kcal.`, [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    } catch (e) {
+      const msg = e instanceof DeepSeekError ? e.message : 'Não foi possível estimar as calorias agora.';
+      Alert.alert('Treino salvo', `${msg} O treino foi salvo mesmo assim.`, [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    } finally {
+      setEstimando(false);
+    }
   }
 
   function removerSessao() {
@@ -111,6 +167,9 @@ export default function WorkoutSessionScreen() {
           <Text style={styles.progress}>
             {feitas}/{total} séries concluídas
           </Text>
+          {session.estimated_kcal != null && (
+            <Text style={styles.kcalLine}>≈ {session.estimated_kcal} kcal gastas (estimativa IA)</Text>
+          )}
         </Card>
 
         {session.exercises.map((ex) => (
@@ -170,8 +229,12 @@ export default function WorkoutSessionScreen() {
           </Card>
         ))}
 
-        <Pressable style={styles.done} onPress={() => router.back()}>
-          <Text style={styles.doneTxt}>Concluir treino</Text>
+        <Pressable style={[styles.done, estimando && styles.doneOff]} onPress={concluir} disabled={estimando}>
+          {estimando ? (
+            <ActivityIndicator color={colors.bg} />
+          ) : (
+            <Text style={styles.doneTxt}>Concluir e estimar calorias</Text>
+          )}
         </Pressable>
       </ScrollView>
     </View>
@@ -181,6 +244,7 @@ export default function WorkoutSessionScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   progress: { color: colors.primary, fontSize: 15, fontWeight: '700', textAlign: 'center' },
+  kcalLine: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginTop: 4 },
   exName: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: spacing.sm },
   headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   colHead: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
@@ -202,5 +266,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary, borderRadius: 999, paddingVertical: 15,
     alignItems: 'center', marginTop: spacing.lg,
   },
+  doneOff: { opacity: 0.7 },
   doneTxt: { color: colors.bg, fontWeight: '800', fontSize: 16 },
 });

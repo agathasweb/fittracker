@@ -177,6 +177,16 @@ export async function deleteSession(id: number): Promise<void> {
   await db.runAsync('DELETE FROM workout_sessions WHERE id = ?', id);
 }
 
+/** Gasto calórico estimado (IA) da sessão de musculação. */
+export async function setSessionKcal(id: number, kcal: number | null): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE workout_sessions SET estimated_kcal = ? WHERE id = ?',
+    kcal === null ? null : Math.max(0, Math.round(kcal)),
+    id
+  );
+}
+
 export type SessionSummary = WorkoutSession & {
   total_sets: number;
   done_sets: number;

@@ -224,6 +224,11 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX idx_wsets_exercise ON workout_session_sets(exercise_name);
     `,
   },
+  {
+    // Gasto calórico estimado (IA) da sessão de musculação.
+    version: 7,
+    sql: `ALTER TABLE workout_sessions ADD COLUMN estimated_kcal INTEGER;`,
+  },
 ];
 
 async function applyMigrations(db: SQLite.SQLiteDatabase) {

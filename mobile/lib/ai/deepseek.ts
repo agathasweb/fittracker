@@ -201,3 +201,49 @@ Estime o gasto calórico total dessa sessão.`;
   }
   return kcal;
 }
+
+export type WorkoutSummary = {
+  name: string;
+  exercises: { name: string; sets: number; reps: number | null; load_kg: number | null }[];
+};
+
+/** Estima o gasto calórico de uma sessão de MUSCULAÇÃO (a IA infere a duração). */
+export async function estimateWorkoutCalories(
+  user: Pick<User, 'sex' | 'current_weight_kg' | 'height_cm' | 'birth_date'>,
+  summary: WorkoutSummary
+): Promise<number> {
+  const feitos = summary.exercises.filter((e) => e.sets > 0);
+  if (feitos.length === 0) {
+    throw new DeepSeekError('Nenhuma série concluída para estimar.', 'INVALID_VALUES');
+  }
+
+  const sexLabel = user.sex === 'M' ? 'masculino' : user.sex === 'F' ? 'feminino' : 'outro';
+  const age = ageFromBirth(user.birth_date);
+  const linhas = feitos
+    .map((e) => {
+      const carga = e.load_kg && e.load_kg > 0 ? `, ~${e.load_kg} kg` : '';
+      const reps = e.reps && e.reps > 0 ? `×${e.reps}` : '';
+      return `- ${e.name}: ${e.sets} série(s)${reps}${carga}`;
+    })
+    .join('\n');
+  const totalSeries = feitos.reduce((acc, e) => acc + e.sets, 0);
+
+  const prompt = `Treino de musculação: ${summary.name.trim()}
+Exercícios concluídos (${totalSeries} séries no total):
+${linhas}
+
+Praticante:
+- Sexo: ${sexLabel}
+- Peso: ${user.current_weight_kg} kg
+- Altura: ${user.height_cm} cm
+- Idade: ${age} anos
+
+Estime a duração típica dessa sessão (incluindo descanso entre séries) e o gasto calórico total.`;
+
+  const parsed = await callDeepSeek(SYSTEM_PROMPT_ACTIVITY, prompt);
+  const kcal = Math.round(Number(parsed.kcal));
+  if (!Number.isFinite(kcal) || kcal < 0) {
+    throw new DeepSeekError('A IA devolveu calorias inválidas.', 'INVALID_VALUES');
+  }
+  return kcal;
+}
