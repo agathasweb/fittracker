@@ -400,6 +400,17 @@ function BackupCard() {
   );
 }
 
+/**
+ * Status do push. O ExpoPushToken NÃO é exibido em produção.
+ *
+ * Ele é o endereço de push do aparelho, e a API do Expo aceita envios para um token
+ * sem autenticação: quem tiver o token de um cliente consegue disparar notificações
+ * com o nome e o ícone do FitTracker ("sua assinatura venceu, clique aqui"). Mostrar
+ * o token cru — e ainda oferecer "Compartilhar" — era um convite a vazá-lo.
+ *
+ * O status ("Registrado"/"Indisponível") é útil pro usuário e não expõe nada.
+ * O token e o compartilhamento seguem disponíveis em desenvolvimento, pra depuração.
+ */
 function PushTokenCard() {
   const token = usePushToken();
 
@@ -424,16 +435,16 @@ function PushTokenCard() {
       </View>
       <Text style={styles.helperText}>
         {token
-          ? 'Este dispositivo está registrado pra receber notificações. O token abaixo pode ser usado pra enviar um push de teste.'
+          ? 'Este dispositivo está registrado pra receber lembretes de refeição, treino e medicamentos.'
           : 'Push remoto só funciona no app instalado (APK/Play), não no Expo Go nem no preview web. Autorize as notificações quando o app pedir.'}
       </Text>
-      {token && (
+      {__DEV__ && token && (
         <>
           <Text selectable style={styles.tokenText}>
             {token}
           </Text>
           <Button
-            title="Compartilhar token"
+            title="Compartilhar token (dev)"
             variant="secondary"
             onPress={shareToken}
             style={{ marginTop: spacing.sm }}
