@@ -1,10 +1,10 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
 import { Logo } from '../../components/Logo';
 import { logout, useAuth } from '../../lib/auth';
 import { PANEL_BASE_URL } from '../../lib/config';
-import { getToken } from '../../lib/entitlement';
+import { getToken, motivoBloqueio } from '../../lib/entitlement';
 import { colors, spacing } from '../../lib/theme';
 
 /**
@@ -17,10 +17,32 @@ import { colors, spacing } from '../../lib/theme';
  *     redirecionava pro login ao ver `guest`, e o usuário só via um piscar: nunca
  *     descobria que o problema era a assinatura.
  */
+/**
+ * Só devolve a URL se ela apontar comprovadamente para o nosso painel.
+ *
+ * Defesa em profundidade: hoje a URL só chega do servidor, mas esta rota é
+ * alcançável por deep link (`scheme: fittracker`), e abrir uma URL arbitrária numa
+ * tela de "regularize seu pagamento" é phishing de cartão com a nossa marca em volta.
+ *
+ * Comparação por prefixo, e não `new URL().hostname`: no React Native o getter
+ * `hostname` lança "not implemented" (Libraries/Blob/URL.js), então a checagem por
+ * host cairia sempre no catch e descartaria em silêncio a URL legítima.
+ *
+ * A barra final é o que impede `https://fittracker.agathasweb.com.golpe.com/` e
+ * `https://fittracker.agathasweb.com@golpe.com/` de passarem.
+ */
+function urlDoPainel(candidata: string | null | undefined): string | null {
+  if (!candidata) return null;
+  const base = PANEL_BASE_URL.replace(/\/+$/, '');
+  return candidata === base || candidata.startsWith(`${base}/`) ? candidata : null;
+}
+
 export default function Blocked() {
   const router = useRouter();
   const auth = useAuth();
-  const params = useLocalSearchParams<{ message?: string; checkoutUrl?: string }>();
+  // Motivo vem do estado interno (login recusado) ou do próprio useAuth (sessão
+  // que perdeu o direito). Nunca de parâmetro de rota — ver urlDoPainel acima.
+  const motivo = motivoBloqueio();
 
   const [temSessao, setTemSessao] = useState<boolean | null>(null);
 
@@ -36,12 +58,13 @@ export default function Blocked() {
   }, [auth.status, router]);
 
   const mensagem =
-    params.message ??
-    (auth.status === 'blocked' ? auth.message : 'Sua assinatura não está ativa.');
+    (auth.status === 'blocked' ? auth.message : null) ??
+    motivo?.message ??
+    'Sua assinatura não está ativa.';
 
   const checkoutUrl =
-    params.checkoutUrl ??
-    (auth.status === 'blocked' ? auth.checkoutUrl : null) ??
+    urlDoPainel(auth.status === 'blocked' ? auth.checkoutUrl : null) ??
+    urlDoPainel(motivo?.checkoutUrl) ??
     `${PANEL_BASE_URL}/assinar`;
 
   const verificando = auth.status === 'loading';

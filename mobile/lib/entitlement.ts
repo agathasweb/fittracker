@@ -33,6 +33,23 @@ export type EntitlementResult =
   | { status: 'needs_reconnect' }   // offline e cache velho (>48h)
   | { status: 'needs_login' };
 
+/**
+ * Motivo do último bloqueio, para a tela `/auth/blocked` exibir.
+ *
+ * Fica em memória de propósito: passar isso por parâmetro de rota deixaria um deep
+ * link (`fittracker://auth/blocked?...`) injetar texto e URL na tela oficial de
+ * assinatura — phishing com a nossa marca em volta.
+ */
+let _motivoBloqueio: { message: string; checkoutUrl: string | null } | null = null;
+
+export function registrarMotivoBloqueio(message: string, checkoutUrl: string | null): void {
+  _motivoBloqueio = { message, checkoutUrl };
+}
+
+export function motivoBloqueio(): { message: string; checkoutUrl: string | null } | null {
+  return _motivoBloqueio;
+}
+
 export async function getToken(): Promise<string | null> {
   return SecureStore.getItemAsync(TOKEN_KEY);
 }

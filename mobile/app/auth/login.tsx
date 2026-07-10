@@ -15,6 +15,7 @@ import { Logo } from '../../components/Logo';
 import { NetworkError, NotEntitledError, UnauthorizedError } from '../../lib/api';
 import { login } from '../../lib/auth';
 import { PANEL_BASE_URL } from '../../lib/config';
+import { registrarMotivoBloqueio } from '../../lib/entitlement';
 import { colors, spacing } from '../../lib/theme';
 
 export default function LoginScreen() {
@@ -39,15 +40,11 @@ export default function LoginScreen() {
       // Cada falha pede uma resposta diferente: senha errada não é o mesmo que
       // assinatura vencida, que não é o mesmo que estar sem sinal.
       if (err instanceof NotEntitledError) {
-        // Credencial certa, assinatura inativa. A tela de bloqueio explica e
-        // oferece regularizar. Passamos a URL que o próprio servidor mandou.
-        router.replace({
-          pathname: '/auth/blocked',
-          params: {
-            message: err.message,
-            ...(err.checkoutUrl ? { checkoutUrl: err.checkoutUrl } : {}),
-          },
-        });
+        // Credencial certa, assinatura inativa. A tela de bloqueio explica e oferece
+        // regularizar. O motivo vai por estado interno, não por parâmetro de rota:
+        // a rota é alcançável por deep link e não deve aceitar texto/URL de fora.
+        registrarMotivoBloqueio(err.message, err.checkoutUrl);
+        router.replace('/auth/blocked');
         return;
       }
       if (err instanceof UnauthorizedError) {
