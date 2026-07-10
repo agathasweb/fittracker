@@ -120,6 +120,60 @@ export async function apiBackupLatest(token: string): Promise<BackupMeta | null>
   return corpo.backup ?? null;
 }
 
+/** Erro de validação com mensagem do servidor (ex.: senha atual incorreta). */
+export class ValidationError extends Error {}
+
+/**
+ * Troca a senha. Não passa pelo request() genérico porque precisa distinguir o
+ * 422 ("senha atual incorreta") de indisponibilidade — o genérico junta tudo
+ * em NetworkError e a mensagem certa se perderia.
+ */
+export async function apiChangePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let resposta: Response;
+  try {
+    resposta = await fetch(`${PANEL_BASE_URL}/api/auth/password`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        current_password: currentPassword,
+        password: newPassword,
+        password_confirmation: newPassword,
+      }),
+    });
+  } catch {
+    throw new NetworkError('Sem conexão com o servidor.');
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (resposta.ok) return;
+
+  let corpo: any = null;
+  try {
+    corpo = await resposta.json();
+  } catch {
+    corpo = null;
+  }
+
+  if (resposta.status === 401) throw new UnauthorizedError('Sessão expirada.');
+  if (resposta.status === 422) {
+    throw new ValidationError(corpo?.message ?? 'Verifique os dados e tente de novo.');
+  }
+  throw new NetworkError(corpo?.message ?? `Erro do servidor (${resposta.status}).`);
+}
+
 export async function apiLogout(token: string): Promise<void> {
   try {
     await request('/api/auth/logout', {

@@ -192,6 +192,11 @@ export default function ProfileScreen() {
       <BackupCard />
 
       <Card title="Conta">
+        <MenuRow
+          icon="key-outline"
+          text="Trocar senha"
+          onPress={() => router.push('/change-password')}
+        />
         <MenuRow icon="log-out-outline" text="Sair" danger onPress={onLogout} />
       </Card>
     </ScrollView>

@@ -20,6 +20,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="auth" options={{ headerShown: false }} />
           <Stack.Screen name="hydration" options={{ title: 'Hidratação' }} />
+          <Stack.Screen name="change-password" options={{ title: 'Trocar senha' }} />
           <Stack.Screen name="meal-template/[id]" options={{ title: 'Refeição padrão' }} />
           <Stack.Screen name="ad-hoc-meal" options={{ title: 'Refeição avulsa' }} />
         </Stack>
