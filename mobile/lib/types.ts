@@ -150,6 +150,64 @@ export type Activity = {
   performed_at: string;
 };
 
+// ─── Treino de força ───────────────────────────────────────────────
+export type WorkoutTemplate = {
+  id: number;
+  user_id: number;
+  name: string;
+  notes: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkoutTemplateExercise = {
+  id: number;
+  template_id: number;
+  name: string;
+  target_sets: number;
+  target_reps: string | null;
+  notes: string | null;
+  position: number;
+};
+
+export type WorkoutTemplateFull = WorkoutTemplate & {
+  exercises: WorkoutTemplateExercise[];
+};
+
+export type WorkoutSession = {
+  id: number;
+  user_id: number;
+  template_id: number | null;
+  name: string;
+  notes: string | null;
+  performed_at: string;
+  created_at: string;
+};
+
+export type WorkoutSessionSet = {
+  id: number;
+  session_id: number;
+  exercise_name: string;
+  exercise_position: number;
+  set_number: number;
+  done: boolean;
+  reps: number | null;
+  load_kg: number | null;
+  created_at: string;
+};
+
+/** Exercício agrupado numa sessão, com suas séries. */
+export type SessionExercise = {
+  name: string;
+  position: number;
+  sets: WorkoutSessionSet[];
+};
+
+export type WorkoutSessionFull = WorkoutSession & {
+  exercises: SessionExercise[];
+};
+
 export const ACTIVITY_FACTOR: Record<ActivityLevel, number> = {
   sedentary: 1.2,
   light: 1.375,

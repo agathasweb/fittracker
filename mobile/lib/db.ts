@@ -166,6 +166,64 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX idx_activities_user_day ON activities(user_id, performed_at);
     `,
   },
+  {
+    // Treino de força: modelos (A/B/C), exercícios do modelo, sessões e séries.
+    version: 6,
+    sql: `
+      CREATE TABLE workout_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        notes TEXT,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX idx_wtemplates_user ON workout_templates(user_id, position);
+
+      CREATE TABLE workout_template_exercises (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_id INTEGER NOT NULL REFERENCES workout_templates(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        target_sets INTEGER NOT NULL DEFAULT 3,
+        target_reps TEXT,
+        notes TEXT,
+        position INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE INDEX idx_wtexercises_template ON workout_template_exercises(template_id, position);
+
+      CREATE TABLE workout_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        template_id INTEGER REFERENCES workout_templates(id) ON DELETE SET NULL,
+        name TEXT NOT NULL,
+        notes TEXT,
+        performed_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX idx_wsessions_user_day ON workout_sessions(user_id, performed_at);
+
+      -- Snapshot: guarda o nome do exercício na sessão, então editar o modelo
+      -- depois não reescreve o histórico já registrado.
+      CREATE TABLE workout_session_sets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
+        exercise_name TEXT NOT NULL,
+        exercise_position INTEGER NOT NULL DEFAULT 0,
+        set_number INTEGER NOT NULL,
+        done INTEGER NOT NULL DEFAULT 0,
+        reps INTEGER,
+        load_kg REAL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX idx_wsets_session ON workout_session_sets(session_id, exercise_position, set_number);
+      CREATE INDEX idx_wsets_exercise ON workout_session_sets(exercise_name);
+    `,
+  },
 ];
 
 async function applyMigrations(db: SQLite.SQLiteDatabase) {
