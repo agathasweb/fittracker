@@ -7,7 +7,7 @@ import { Card } from '../../components/Card';
 import { useAuth } from '../../lib/auth';
 import { formatTime, todayISO } from '../../lib/format';
 import { deleteActivity, listActivitiesOfDay } from '../../lib/repos/activities';
-import { seedGuttoWorkoutsIfNeeded } from '../../lib/repos/workoutSeed';
+import { seedInitialWorkoutsIfNeeded } from '../../lib/repos/workoutSeed';
 import { listSessions, SessionSummary, startSessionFromTemplate, todaySession } from '../../lib/repos/workoutSessions';
 import { listTemplates } from '../../lib/repos/workoutTemplates';
 import { colors, radius, spacing } from '../../lib/theme';
@@ -27,7 +27,7 @@ export default function WorkoutsScreen() {
 
   const load = useCallback(async () => {
     if (!userId || !user) return;
-    await seedGuttoWorkoutsIfNeeded(userId, user.email);
+    await seedInitialWorkoutsIfNeeded(userId, user.email);
     setTemplates(await listTemplates(userId));
     setToday(await todaySession(userId, todayISO()));
     setRecent((await listSessions(userId, 3)));
