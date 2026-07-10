@@ -39,7 +39,15 @@ export default function LoginScreen() {
       // Cada falha pede uma resposta diferente: senha errada não é o mesmo que
       // assinatura vencida, que não é o mesmo que estar sem sinal.
       if (err instanceof NotEntitledError) {
-        router.replace({ pathname: '/auth/blocked', params: { message: err.message } });
+        // Credencial certa, assinatura inativa. A tela de bloqueio explica e
+        // oferece regularizar. Passamos a URL que o próprio servidor mandou.
+        router.replace({
+          pathname: '/auth/blocked',
+          params: {
+            message: err.message,
+            ...(err.checkoutUrl ? { checkoutUrl: err.checkoutUrl } : {}),
+          },
+        });
         return;
       }
       if (err instanceof UnauthorizedError) {

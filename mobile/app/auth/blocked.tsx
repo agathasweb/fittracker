@@ -1,25 +1,37 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
 import { Logo } from '../../components/Logo';
-import { useAuth, logout } from '../../lib/auth';
+import { logout, useAuth } from '../../lib/auth';
 import { PANEL_BASE_URL } from '../../lib/config';
+import { getToken } from '../../lib/entitlement';
 import { colors, spacing } from '../../lib/theme';
 
 /**
  * Assinatura inativa (pagamento falhou, venceu ou foi cancelada).
- * Bloqueio total: este estado fica gravado no device, então nem offline o app abre.
- * Só um 200 do servidor (`/api/auth/me`) destrava — ou seja, pagar e reconectar.
+ *
+ * Alcançada de dois jeitos, e os dois precisam funcionar:
+ *  1. Sessão ativa que perdeu o direito → `/api/auth/me` devolveu 403. O bloqueio
+ *     fica gravado no disco, então nem offline o app abre.
+ *  2. Tentativa de LOGIN que devolveu 403 → não há token nenhum. Antes esta tela
+ *     redirecionava pro login ao ver `guest`, e o usuário só via um piscar: nunca
+ *     descobria que o problema era a assinatura.
  */
 export default function Blocked() {
   const router = useRouter();
   const auth = useAuth();
-  const params = useLocalSearchParams<{ message?: string }>();
+  const params = useLocalSearchParams<{ message?: string; checkoutUrl?: string }>();
 
-  // Pagou e revalidou: sem isto o usuário fica preso nesta tela mesmo liberado.
+  const [temSessao, setTemSessao] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getToken().then((t) => setTemSessao(!!t));
+  }, []);
+
+  // Só saímos daqui quando o servidor confirmar que o direito voltou.
+  // Não redirecionar em 'guest': é o estado normal de quem chegou pelo login.
   useEffect(() => {
     if (auth.status === 'authed') router.replace('/(tabs)');
-    if (auth.status === 'guest') router.replace('/auth/login');
     if (auth.status === 'needs_profile') router.replace('/auth/register');
   }, [auth.status, router]);
 
@@ -28,7 +40,11 @@ export default function Blocked() {
     (auth.status === 'blocked' ? auth.message : 'Sua assinatura não está ativa.');
 
   const checkoutUrl =
-    (auth.status === 'blocked' ? auth.checkoutUrl : null) ?? `${PANEL_BASE_URL}/assinar`;
+    params.checkoutUrl ??
+    (auth.status === 'blocked' ? auth.checkoutUrl : null) ??
+    `${PANEL_BASE_URL}/assinar`;
+
+  const verificando = auth.status === 'loading';
 
   return (
     <View
@@ -48,6 +64,10 @@ export default function Blocked() {
       <Text style={{ color: colors.textMuted, textAlign: 'center', lineHeight: 22 }}>
         {mensagem}
       </Text>
+      <Text style={{ color: colors.textMuted, textAlign: 'center', fontSize: 13 }}>
+        Assine ou regularize o pagamento para voltar a usar o FitTracker. Seus dados
+        continuam salvos.
+      </Text>
 
       <Pressable
         onPress={() => Linking.openURL(checkoutUrl)}
@@ -58,15 +78,25 @@ export default function Blocked() {
           borderRadius: 999,
         }}
       >
-        <Text style={{ color: colors.bg, fontWeight: '800' }}>Assinar agora</Text>
+        <Text style={{ color: colors.bg, fontWeight: '800' }}>
+          Assinar / regularizar pagamento
+        </Text>
       </Pressable>
 
-      <Pressable onPress={() => auth.reload()} disabled={auth.status === 'loading'}>
-        {auth.status === 'loading' ? (
+      {/* Com sessão dá pra revalidar aqui mesmo. Sem sessão (veio de um login
+          recusado) não há token pra consultar: o caminho é tentar entrar de novo. */}
+      <Pressable
+        onPress={() => {
+          if (temSessao) auth.reload();
+          else router.replace('/auth/login');
+        }}
+        disabled={verificando}
+      >
+        {verificando ? (
           <ActivityIndicator color={colors.primary} />
         ) : (
           <Text style={{ color: colors.primary, fontWeight: '700' }}>
-            Já paguei — verificar novamente
+            {temSessao ? 'Já paguei — verificar novamente' : 'Já paguei — tentar entrar'}
           </Text>
         )}
       </Pressable>
@@ -77,7 +107,9 @@ export default function Blocked() {
           router.replace('/auth/login');
         }}
       >
-        <Text style={{ color: colors.textMuted, fontSize: 13 }}>Entrar com outra conta</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+          {temSessao ? 'Entrar com outra conta' : 'Voltar ao login'}
+        </Text>
       </Pressable>
     </View>
   );
