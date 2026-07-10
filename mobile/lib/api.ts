@@ -4,7 +4,7 @@ import { PANEL_BASE_URL } from './config';
  * Cliente da API do painel.
  *
  * A distinção entre os erros é o coração do gate: "sem internet" NÃO é a mesma
- * coisa que "não pagou". Offline tolera 48h; falha de pagamento bloqueia na hora,
+ * coisa que "não pagou". Offline tolera 24h; falha de pagamento bloqueia na hora,
  * inclusive offline. Confundir os dois ou tranca quem pagou, ou libera quem não pagou.
  */
 

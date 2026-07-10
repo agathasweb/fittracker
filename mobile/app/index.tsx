@@ -41,7 +41,7 @@ export default function Index() {
   if (auth.status === 'authed') return <Redirect href="/(tabs)" />;
   // Assinatura caiu: bloqueio total, vale inclusive offline.
   if (auth.status === 'blocked') return <Redirect href="/auth/blocked" />;
-  // Só falta de rede há mais de 48h — não é inadimplência.
+  // Só falta de rede há mais de 24h — não é inadimplência.
   if (auth.status === 'needs_reconnect') return <Redirect href="/auth/reconnect" />;
   // Autenticado no servidor, mas sem perfil local neste aparelho.
   if (auth.status === 'needs_profile') return <Redirect href="/auth/register" />;

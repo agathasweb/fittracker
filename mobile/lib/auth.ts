@@ -161,7 +161,7 @@ export function useAuth(): AuthState & { reload: () => Promise<void> } {
         return;
       }
 
-      // Servidor confirmou (ou cache dentro das 48h). Falta o perfil local?
+      // Servidor confirmou (ou cache dentro das 24h). Falta o perfil local?
       const user = await getCurrentUser();
       if (!user) {
         const pending = await getPendingProfile();

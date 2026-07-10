@@ -7,7 +7,7 @@ import { OFFLINE_GRACE_MS } from './config';
  * Direito de uso do app.
  *
  * Regras (decisão do usuário):
- *  - Sem internet: libera por até 48h desde a última confirmação do servidor.
+ *  - Sem internet: libera por até 24h desde a última confirmação do servidor.
  *  - Falha de pagamento detectada (403): bloqueio TOTAL e persistido — nem offline
  *    o app abre. Só um 200 do servidor limpa esse estado.
  *  - Token inválido (401): não é inadimplência; manda pro login.
@@ -24,13 +24,22 @@ type Cache = {
   checkedAt: number;
   /** true = pagamento falhou/assinatura caiu. Bloqueia inclusive offline. */
   blocked: boolean;
+  /**
+   * Maior `Date.now()` já observado. A janela offline é medida pelo relógio do
+   * aparelho, que o usuário controla: sem isto, bastaria atrasar a data pra o cache
+   * parecer eterno. Se o relógio andar pra trás, tratamos como adulteração.
+   */
+  maxSeen?: number;
 };
+
+/** Folga pra ajuste de fuso/NTP não ser confundido com adulteração. */
+const TOLERANCIA_RELOGIO_MS = 5 * 60 * 1000;
 
 export type EntitlementResult =
   | { status: 'ok' }
   | { status: 'ok_offline'; checkedAt: number }
   | { status: 'blocked'; message: string; checkoutUrl: string | null }
-  | { status: 'needs_reconnect' }   // offline e cache velho (>48h)
+  | { status: 'needs_reconnect' }   // offline e cache velho (>24h)
   | { status: 'needs_login' };
 
 /**
@@ -82,7 +91,14 @@ export async function limparEntitlement(): Promise<void> {
 
 /** Chamado após um login bem-sucedido: o servidor acabou de confirmar o direito. */
 export async function marcarConfirmado(): Promise<void> {
-  await gravarCache({ checkedAt: Date.now(), blocked: false });
+  const agora = Date.now();
+  await gravarCache({ checkedAt: agora, blocked: false, maxSeen: agora });
+}
+
+/** O relógio do aparelho voltou no tempo desde a última vez que olhamos? */
+function relogioRecuou(cache: Cache | null, agora: number): boolean {
+  if (!cache?.maxSeen) return false;
+  return agora < cache.maxSeen - TOLERANCIA_RELOGIO_MS;
 }
 
 /**
@@ -94,16 +110,21 @@ export async function verificarEntitlement(): Promise<EntitlementResult> {
   if (!token) return { status: 'needs_login' };
 
   const cache = await lerCache();
+  const agora = Date.now();
+  const relogioAdulterado = relogioRecuou(cache, agora);
 
-  // Bloqueio persistido vence tudo: nem tenta o caminho offline.
-  // (Ainda assim consultamos o servidor abaixo — pagar deve destravar.)
+  // Sempre consultamos o servidor: pagar tem que destravar, mesmo com bloqueio gravado.
   try {
     await apiMe(token);
-    await gravarCache({ checkedAt: Date.now(), blocked: false });
+    await gravarCache({ checkedAt: agora, blocked: false, maxSeen: agora });
     return { status: 'ok' };
   } catch (e) {
     if (e instanceof NotEntitledError) {
-      await gravarCache({ checkedAt: cache?.checkedAt ?? Date.now(), blocked: true });
+      await gravarCache({
+        checkedAt: cache?.checkedAt ?? agora,
+        blocked: true,
+        maxSeen: Math.max(cache?.maxSeen ?? 0, agora),
+      });
       return { status: 'blocked', message: e.message, checkoutUrl: e.checkoutUrl };
     }
 
@@ -122,7 +143,19 @@ export async function verificarEntitlement(): Promise<EntitlementResult> {
           checkoutUrl: null,
         };
       }
-      if (cache && Date.now() - cache.checkedAt <= OFFLINE_GRACE_MS) {
+
+      // Relógio atrasado pra esticar a janela: exige reconexão, que é a única
+      // fonte de tempo confiável. Sem isto, a tolerância offline seria eterna.
+      if (relogioAdulterado) {
+        return { status: 'needs_reconnect' };
+      }
+
+      // Guarda o avanço do relógio mesmo offline, pra não perder o marco d'água.
+      if (cache && agora > (cache.maxSeen ?? 0)) {
+        await gravarCache({ ...cache, maxSeen: agora });
+      }
+
+      if (cache && agora - cache.checkedAt <= OFFLINE_GRACE_MS) {
         return { status: 'ok_offline', checkedAt: cache.checkedAt };
       }
       return { status: 'needs_reconnect' };

@@ -7,5 +7,9 @@
  */
 export const PANEL_BASE_URL = 'https://fittracker.agathasweb.com';
 
-/** Janela de tolerância sem internet antes de exigir reconexão. */
-export const OFFLINE_GRACE_MS = 48 * 60 * 60 * 1000; // 48h
+/**
+ * Janela de tolerância sem internet antes de exigir reconexão.
+ * Passado esse tempo desde a última confirmação do servidor, o app bloqueia
+ * sozinho — sem depender de rede pra decidir.
+ */
+export const OFFLINE_GRACE_MS = 24 * 60 * 60 * 1000; // 24h

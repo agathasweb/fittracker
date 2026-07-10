@@ -6,7 +6,7 @@ import { useAuth } from '../../lib/auth';
 import { colors, spacing } from '../../lib/theme';
 
 /**
- * Passou de 48h sem o servidor confirmar a assinatura.
+ * Passou de 24h sem o servidor confirmar a assinatura.
  * Diferente de `blocked`: aqui não há indício de inadimplência, só falta de rede.
  * Basta reconectar — a mensagem não acusa o usuário de nada.
  */
@@ -37,7 +37,7 @@ export default function Reconnect() {
         Conecte-se à internet
       </Text>
       <Text style={{ color: colors.textMuted, textAlign: 'center', lineHeight: 22 }}>
-        Faz mais de 48 horas que não conseguimos confirmar sua assinatura.
+        Faz mais de 24 horas que não conseguimos confirmar sua assinatura.
         Conecte-se uma vez para continuar usando o app offline.
       </Text>
 
