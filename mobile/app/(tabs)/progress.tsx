@@ -27,6 +27,11 @@ function weekLabel(weekStart: string): string {
   return `${d1}/${m1} – ${d2}/${m2}`;
 }
 
+/** Milhar com ponto: 12400 → "12.400". */
+function fmt(n: number): string {
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
 export default function ProgressScreen() {
   const auth = useAuth();
   const [generating, setGenerating] = useState(false);
@@ -144,6 +149,13 @@ export default function ProgressScreen() {
   const diasMeta = dias.filter((d) => d.supp_expected > 0 && d.supp_consumed >= d.supp_expected).length;
   const diasComSupp = dias.filter((d) => d.supp_expected > 0).length;
 
+  // Totais da semana (o usuário quer ver os números, não só a altura das barras).
+  const totMl = dias.reduce((a, d) => a + d.hydration_ml, 0);
+  const totRefeicoes = dias.reduce((a, d) => a + d.meals_count, 0);
+  const totKcalRefeicoes = dias.reduce((a, d) => a + d.meals_kcal, 0);
+  const totKcalTreino = dias.reduce((a, d) => a + d.workout_kcal, 0);
+  const totDoses = dias.reduce((a, d) => a + d.supp_consumed, 0);
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bg }}
@@ -206,15 +218,42 @@ export default function ProgressScreen() {
           </View>
         ) : (
           <>
-            <WeekBarChart title="Hidratação" unit="ml/dia" days={hidratacao} color="#38BDF8" goal={goalWater} />
-            <WeekBarChart title="Refeições" unit="kcal/dia" days={refeicoes} color={colors.primary} goal={goalKcal} subtitle="nº de refeições · kcal/dia" />
-            <WeekBarChart title="Treinos" unit="kcal gastas/dia" days={treinos} color="#A78BFA" />
+            <WeekBarChart
+              title="Hidratação"
+              unit="ml/dia"
+              days={hidratacao}
+              color="#38BDF8"
+              goal={goalWater}
+              subtitle={`${fmt(totMl)} ml na semana`}
+            />
+            <View style={styles.divider} />
+            <WeekBarChart
+              title="Refeições"
+              unit="kcal/dia"
+              days={refeicoes}
+              color={colors.primary}
+              goal={goalKcal}
+              subtitle={`${totRefeicoes} refeições · ${fmt(totKcalRefeicoes)} kcal`}
+            />
+            <View style={styles.divider} />
+            <WeekBarChart
+              title="Treinos"
+              unit="kcal gastas/dia"
+              days={treinos}
+              color="#A78BFA"
+              subtitle={`${fmt(totKcalTreino)} kcal gastas na semana`}
+            />
+            <View style={styles.divider} />
             <WeekBarChart
               title="Suplementos"
               unit="tomadas"
               days={suplementos}
               color="#FB923C"
-              subtitle={diasComSupp > 0 ? `meta batida em ${diasMeta}/${diasComSupp} dias` : 'sem suplementos agendados'}
+              subtitle={
+                diasComSupp > 0
+                  ? `${totDoses} tomadas · meta batida em ${diasMeta}/${diasComSupp} dias`
+                  : `${totDoses} tomadas · sem meta agendada`
+              }
             />
           </>
         )}
@@ -249,6 +288,7 @@ const styles = StyleSheet.create({
   hoje: { alignSelf: 'center', marginTop: spacing.sm, paddingVertical: 6, paddingHorizontal: 16 },
   hojeTxt: { color: colors.primary, fontSize: 13, fontWeight: '700' },
   loading: { color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginBottom: spacing.md },
   emptyTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginTop: spacing.sm },
   helper: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
 });
