@@ -43,7 +43,7 @@ export default function ProgressScreen() {
 
   const userId = auth.status === 'authed' ? auth.user.id : null;
   const goalWater = auth.status === 'authed' ? auth.user.daily_water_goal_ml : null;
-  const goalKcal = auth.status === 'authed' ? auth.user.daily_calorie_goal ?? null : null;
+  const goalProtein = auth.status === 'authed' ? auth.user.daily_protein_goal_g : null;
 
   const thisMonday = mondayOf(todayISO());
 
@@ -120,13 +120,16 @@ export default function ProgressScreen() {
     hasData: d.hasData && d.hydration_ml > 0,
   }));
 
-  const refeicoes: DayBar[] = dias.map((d, i) => ({
+  const proteina: DayBar[] = dias.map((d, i) => ({
     label: DOW[i],
-    value: d.meals_kcal,
-    hasData: d.hasData && d.meals_count > 0,
-    // nº de refeições no topo, kcal na barra
-    annotation: d.meals_count > 0 ? `${d.meals_count}✕` : null,
+    value: d.protein_g,
+    hasData: d.hasData && d.protein_g > 0,
+    annotation: d.protein_g > 0 ? `${d.protein_g}g` : null,
+    hit: goalProtein != null && d.protein_g >= goalProtein,
   }));
+  const diasMetaProteina = goalProtein != null
+    ? dias.filter((d) => d.protein_g >= goalProtein).length
+    : 0;
 
   const treinos: DayBar[] = dias.map((d, i) => ({
     label: DOW[i],
@@ -151,8 +154,7 @@ export default function ProgressScreen() {
 
   // Totais da semana (o usuário quer ver os números, não só a altura das barras).
   const totMl = dias.reduce((a, d) => a + d.hydration_ml, 0);
-  const totRefeicoes = dias.reduce((a, d) => a + d.meals_count, 0);
-  const totKcalRefeicoes = dias.reduce((a, d) => a + d.meals_kcal, 0);
+  const totProteina = dias.reduce((a, d) => a + d.protein_g, 0);
   const totKcalTreino = dias.reduce((a, d) => a + d.workout_kcal, 0);
   const totDoses = dias.reduce((a, d) => a + d.supp_consumed, 0);
 
@@ -228,12 +230,12 @@ export default function ProgressScreen() {
             />
             <View style={styles.divider} />
             <WeekBarChart
-              title="Refeições"
-              unit="kcal/dia"
-              days={refeicoes}
+              title="Proteína"
+              unit="g/dia"
+              days={proteina}
               color={colors.primary}
-              goal={goalKcal}
-              subtitle={`${totRefeicoes} refeições · ${fmt(totKcalRefeicoes)} kcal`}
+              goal={goalProtein}
+              subtitle={`${fmt(totProteina)} g na semana · meta batida em ${diasMetaProteina}/7 dias`}
             />
             <View style={styles.divider} />
             <WeekBarChart

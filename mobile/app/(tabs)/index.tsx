@@ -14,19 +14,18 @@ import {
 import { Card } from '../../components/Card';
 import { ProgressBar } from '../../components/ProgressBar';
 import { useAuth } from '../../lib/auth';
-import { ageFromBirth, get, tmb, todayISO } from '../../lib/format';
-import { sumKcalOfDay as sumActivityKcalOfDay } from '../../lib/repos/activities';
+import { ageFromBirth, tmb, todayISO } from '../../lib/format';
 import { listFavoriteBottles } from '../../lib/repos/bottles';
 import { addEntry, sumMlOfDay } from '../../lib/repos/hydration';
-import { totalsOfDay } from '../../lib/repos/meals';
 import {
   listMedications,
   MedicationWithToday,
   recordIntake,
   reminderStatuses,
 } from '../../lib/repos/medications';
+import { listSources, logSource, sumProteinOfDay } from '../../lib/repos/protein';
 import { colors, radius, spacing } from '../../lib/theme';
-import { Bottle } from '../../lib/types';
+import { Bottle, ProteinSource } from '../../lib/types';
 
 export default function HojeScreen() {
   const auth = useAuth();
@@ -34,8 +33,8 @@ export default function HojeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [favorites, setFavorites] = useState<Bottle[]>([]);
   const [hydrationMl, setHydrationMl] = useState(0);
-  const [mealKcal, setMealKcal] = useState(0);
-  const [activityKcal, setActivityKcal] = useState(0);
+  const [proteinG, setProteinG] = useState(0);
+  const [proteinSources, setProteinSources] = useState<ProteinSource[]>([]);
   const [meds, setMeds] = useState<MedicationWithToday[]>([]);
 
   const userId = auth.status === 'authed' ? auth.user.id : null;
@@ -44,17 +43,17 @@ export default function HojeScreen() {
   const load = useCallback(async () => {
     if (!userId) return;
     const day = todayISO();
-    const [favs, ml, totals, actKcal, supps] = await Promise.all([
+    const [favs, ml, protein, sources, supps] = await Promise.all([
       listFavoriteBottles(userId),
       sumMlOfDay(userId, day),
-      totalsOfDay(userId, day),
-      sumActivityKcalOfDay(userId, day),
+      sumProteinOfDay(userId, day),
+      listSources(userId),
       listMedications(userId),
     ]);
     setFavorites(favs);
     setHydrationMl(ml);
-    setMealKcal(Math.round(totals.kcal));
-    setActivityKcal(actKcal);
+    setProteinG(protein);
+    setProteinSources(sources);
     setMeds(supps);
   }, [userId]);
 
@@ -76,6 +75,12 @@ export default function HojeScreen() {
     setHydrationMl((v) => v + b.capacity_ml);
   }
 
+  async function logProtein(s: ProteinSource) {
+    if (!userId) return;
+    await logSource(userId, s);
+    setProteinG((v) => v + s.protein_g);
+  }
+
   async function takeSupp(m: MedicationWithToday) {
     await recordIntake(m.id);
     await load();
@@ -86,10 +91,8 @@ export default function HojeScreen() {
   const today = format(parseISO(todayISO()), "EEEE, dd 'de' MMMM", { locale: ptBR });
   const age = ageFromBirth(user.birth_date);
   const userTmb = tmb(user.sex, user.current_weight_kg, user.height_cm, age);
-  const userGet = get(userTmb, user.activity_level);
-  const goalKcal = user.daily_calorie_goal ?? Math.round(userGet - 500);
-  const balance = mealKcal - activityKcal - goalKcal;
-  const isDeficit = balance < 0;
+  const proteinGoal = user.daily_protein_goal_g;
+  const proteinLeft = Math.max(0, Math.round(proteinGoal - proteinG));
 
   const waterPct = Math.min(1, hydrationMl / user.daily_water_goal_ml);
 
@@ -163,26 +166,42 @@ export default function HojeScreen() {
         </Card>
       </Pressable>
 
-      <Card>
-        <Text style={styles.cardLabel}>BALANÇO DE HOJE</Text>
-        <Text
-          style={[
-            styles.balance,
-            { color: isDeficit ? colors.success : colors.warning },
-          ]}
-        >
-          {balance > 0 ? '+' : ''}
-          {balance} kcal
-        </Text>
-        <Text style={styles.balanceHint}>
-          {isDeficit ? 'Em déficit — emagrecendo' : 'Em superávit'}
-        </Text>
-        <View style={styles.statsRow}>
-          <Stat label="Consumido" value={`${mealKcal}`} />
-          <Stat label="Queimado" value={`${activityKcal}`} />
-          <Stat label="Meta" value={`${goalKcal}`} />
-        </View>
-      </Card>
+      <Pressable onPress={() => router.push('/protein')}>
+        <Card>
+          <View style={styles.hydrationHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardLabel}>META PROTEICA</Text>
+              <Text style={styles.hydrationValue}>
+                {Math.round(proteinG)} <Text style={styles.hydrationUnit}>g</Text>
+              </Text>
+              <Text style={styles.hydrationGoal}>
+                {proteinLeft > 0
+                  ? `de ${proteinGoal} g · faltam ${proteinLeft} g`
+                  : `de ${proteinGoal} g · meta batida!`}
+              </Text>
+            </View>
+            <Ionicons name="nutrition" size={42} color={colors.primary} />
+          </View>
+          <ProgressBar value={proteinG} max={proteinGoal} height={12} />
+          <View style={styles.bottlesRow}>
+            {proteinSources.map((s) => (
+              <Pressable
+                key={s.id}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  logProtein(s);
+                }}
+                style={styles.bottleChip}
+              >
+                <Ionicons name="add" size={16} color={colors.bg} />
+                <Text style={styles.bottleChipText}>
+                  {s.name} · {Math.round(s.protein_g)}g
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
+      </Pressable>
 
       {suppsWithReminders.length > 0 && (
         <Card>
@@ -314,16 +333,6 @@ const styles = StyleSheet.create({
     color: colors.bg,
     fontWeight: '700',
     fontSize: 13,
-  },
-  balance: {
-    fontSize: 40,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  balanceHint: {
-    color: colors.textMuted,
-    marginTop: 2,
-    marginBottom: spacing.md,
   },
   statsRow: {
     flexDirection: 'row',

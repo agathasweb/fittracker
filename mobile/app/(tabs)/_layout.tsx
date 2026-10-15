@@ -59,6 +59,9 @@ export default function TabsLayout() {
           name="meals"
           options={{
             title: 'Refeições',
+            // Desativada (out/2026): balanço calórico aposentado em favor da Meta
+            // Proteica. Tela e dados preservados — pra reativar, remova o href.
+            href: null,
             tabBarIcon: ({ color, size }) => <Ionicons name="restaurant" size={size} color={color} />,
           }}
         />

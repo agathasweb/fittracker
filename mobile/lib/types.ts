@@ -25,6 +25,7 @@ export type User = {
   activity_level: ActivityLevel;
   daily_water_goal_ml: number;
   daily_calorie_goal: number | null;
+  daily_protein_goal_g: number;
   avatar_uri: string | null;
   created_at: string;
   updated_at: string;
@@ -236,4 +237,23 @@ export const SEX_LABEL: Record<Sex, string> = {
   M: 'Masculino',
   F: 'Feminino',
   O: 'Outro',
+};
+
+export type ProteinSource = {
+  id: number;
+  user_id: number;
+  name: string;
+  /** Descrição da porção que o toque registra, ex.: "1 unidade", "1 scoop (30 g)". */
+  portion: string;
+  protein_g: number;
+  sort_order: number;
+};
+
+export type ProteinEntry = {
+  id: number;
+  user_id: number;
+  source_id: number | null;
+  label: string;
+  protein_g: number;
+  consumed_at: string;
 };

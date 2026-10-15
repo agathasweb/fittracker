@@ -229,6 +229,34 @@ const MIGRATIONS: { version: number; sql: string }[] = [
     version: 7,
     sql: `ALTER TABLE workout_sessions ADD COLUMN estimated_kcal INTEGER;`,
   },
+  {
+    // Meta Proteica: substitui o balanço calórico. Fontes = atalhos de 1 toque
+    // (ovo, whey...) com gramas de proteína editáveis; entries = o que foi comido.
+    // consumed_at sem DEFAULT de propósito — o repo passa nowISO() (local).
+    version: 8,
+    sql: `
+      ALTER TABLE users ADD COLUMN daily_protein_goal_g INTEGER NOT NULL DEFAULT 180;
+
+      CREATE TABLE protein_sources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        portion TEXT NOT NULL,
+        protein_g REAL NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE TABLE protein_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        source_id INTEGER REFERENCES protein_sources(id) ON DELETE SET NULL,
+        label TEXT NOT NULL,
+        protein_g REAL NOT NULL,
+        consumed_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_protein_entries_user_day ON protein_entries(user_id, consumed_at);
+    `,
+  },
 ];
 
 async function applyMigrations(db: SQLite.SQLiteDatabase) {

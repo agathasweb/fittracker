@@ -12,8 +12,7 @@ import { getDb } from './db';
 export type DayRecord = {
   date: string; // yyyy-MM-dd
   hydration_ml: number;
-  meals_kcal: number;
-  meals_count: number;
+  protein_g: number; // proteína consumida no dia (Meta Proteica)
   workout_kcal: number; // calorias gastas no dia (atividades/cardio)
   supp_consumed: number; // doses tomadas
   supp_expected: number; // doses agendadas (meta do dia)
@@ -49,6 +48,7 @@ export async function firstActivityDate(userId: number): Promise<string | null> 
     `SELECT MIN(d) AS d FROM (
         SELECT MIN(date(consumed_at)) d FROM hydration_entries WHERE user_id = ?1
         UNION ALL SELECT MIN(date(consumed_at)) FROM meals WHERE user_id = ?1
+        UNION ALL SELECT MIN(date(consumed_at)) FROM protein_entries WHERE user_id = ?1
         UNION ALL SELECT MIN(date(performed_at)) FROM activities WHERE user_id = ?1
         UNION ALL SELECT MIN(date(performed_at)) FROM workout_sessions WHERE user_id = ?1
         UNION ALL SELECT MIN(date(i.taken_at)) FROM medication_intakes i
@@ -100,31 +100,9 @@ export async function dailyRecords(
     userId, startISO, endISO
   );
 
-  // Refeições: kcal de itens + kcal de preparos manuais (duas fontes, somadas).
-  const kcalItens = await porDia(
-    `SELECT date(m.consumed_at) d,
-            SUM(i.quantity_g * f.kcal_per_100g / 100.0) v
-       FROM meals m
-       JOIN meal_items i ON i.meal_id = m.id
-       JOIN foods f ON f.id = i.food_id
-       LEFT JOIN meal_templates t ON t.id = m.meal_template_id
-      WHERE m.user_id = ? AND date(m.consumed_at) BETWEEN ? AND ?
-        AND (t.id IS NULL OR t.manual_kcal IS NULL)
-      GROUP BY d`,
-    userId, startISO, endISO
-  );
-  const kcalManual = await porDia(
-    `SELECT date(m.consumed_at) d, SUM(t.manual_kcal) v
-       FROM meals m
-       JOIN meal_templates t ON t.id = m.meal_template_id
-      WHERE m.user_id = ? AND date(m.consumed_at) BETWEEN ? AND ?
-        AND t.manual_kcal IS NOT NULL
-      GROUP BY d`,
-    userId, startISO, endISO
-  );
-
-  const refeicoesQtd = await porDia(
-    `SELECT date(consumed_at) d, COUNT(*) v FROM meals
+  // Proteína substituiu o balanço calórico das refeições (out/2026).
+  const proteina = await porDia(
+    `SELECT date(consumed_at) d, SUM(protein_g) v FROM protein_entries
       WHERE user_id = ? AND date(consumed_at) BETWEEN ? AND ? GROUP BY d`,
     userId, startISO, endISO
   );
@@ -155,8 +133,7 @@ export async function dailyRecords(
   const out: DayRecord[] = [];
   for (const date of eachDayISO(startISO, endISO)) {
     const hydration_ml = Math.round(hidratacao.get(date) ?? 0);
-    const meals_kcal = Math.round((kcalItens.get(date) ?? 0) + (kcalManual.get(date) ?? 0));
-    const meals_count = Math.round(refeicoesQtd.get(date) ?? 0);
+    const protein_g = Math.round(proteina.get(date) ?? 0);
     const workout_kcal = Math.round((kcalCardio.get(date) ?? 0) + (kcalMusculacao.get(date) ?? 0));
     const supp_consumed = Math.round(dosesTomadas.get(date) ?? 0);
     // Meta do dia: doses agendadas dos suplementos que já existiam nesse dia.
@@ -166,14 +143,13 @@ export async function dailyRecords(
     out.push({
       date,
       hydration_ml,
-      meals_kcal,
-      meals_count,
+      protein_g,
       workout_kcal,
       supp_consumed,
       supp_expected,
       hasData:
         hydration_ml > 0 ||
-        meals_count > 0 ||
+        protein_g > 0 ||
         workout_kcal > 0 ||
         supp_consumed > 0,
     });
@@ -200,8 +176,7 @@ export function groupByWeek(records: DayRecord[]): WeekBlock[] {
         porData.get(date) ?? {
           date,
           hydration_ml: 0,
-          meals_kcal: 0,
-          meals_count: 0,
+          protein_g: 0,
           workout_kcal: 0,
           supp_consumed: 0,
           supp_expected: 0,
