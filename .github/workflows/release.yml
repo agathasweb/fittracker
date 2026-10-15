@@ -87,6 +87,28 @@ jobs:
           curl -L -o fittracker.apk "$(cat apk-url.txt)"
           ls -lh fittracker.apk
 
+      - name: Show EAS build logs (on failure)
+        if: failure()
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas build:list --platform android --limit 1 --json --non-interactive > last.json || exit 0
+          python3 - <<'PY'
+          import json, urllib.request
+          b = json.load(open('last.json'))[0]
+          print('status:', b.get('status'), '| error:', json.dumps(b.get('error'), ensure_ascii=False))
+          for url in b.get('logFiles') or []:
+              lines = []
+              for raw in urllib.request.urlopen(url).read().decode('utf-8', 'replace').splitlines():
+                  try:
+                      j = json.loads(raw)
+                      lines.append(f"[{j.get('phase', '')}] {j.get('msg', '')}")
+                  except Exception:
+                      lines.append(raw)
+              print('\n'.join(lines[-120:]))
+          PY
+
       - name: Determine release tag
         id: tag
         env:
