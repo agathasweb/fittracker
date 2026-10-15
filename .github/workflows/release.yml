@@ -63,22 +63,25 @@ jobs:
         working-directory: mobile
         run: npm ci --legacy-peer-deps
 
-      - name: Restore google-services.json
+      - name: Sync google-services.json to EAS (file env var)
         working-directory: mobile
         env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           GOOGLE_SERVICES_JSON_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
         run: |
-          # Fora do git (repo público); o .easignore deixa o EAS enviar o arquivo.
-          echo "$GOOGLE_SERVICES_JSON_B64" | base64 -d > google-services.json
-          python3 -c "import json; json.load(open('google-services.json'))"
+          # Fora do git (repo público). O EAS só envia arquivos rastreados, então o
+          # arquivo vai como variável de ambiente do tipo arquivo (lida no app.config.js).
+          echo "$GOOGLE_SERVICES_JSON_B64" | base64 -d > /tmp/google-services.json
+          python3 -c "import json; json.load(open('/tmp/google-services.json'))"
+          eas env:create --environment production --name GOOGLE_SERVICES_JSON \
+            --type file --value /tmp/google-services.json --visibility secret \
+            --non-interactive --force
+          rm -f /tmp/google-services.json
 
       - name: Build Android (production)
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          # Sem VCS o EAS empacota a pasta como está (respeitando o .easignore); no modo
-          # git ele só envia arquivos rastreados e o google-services.json ficaria de fora.
-          EAS_NO_VCS: '1'
         run: |
           eas build \
             --platform android \
