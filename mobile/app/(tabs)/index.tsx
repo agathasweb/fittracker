@@ -20,6 +20,7 @@ import { addEntry, sumMlOfDay } from '../../lib/repos/hydration';
 import {
   listMedications,
   MedicationWithToday,
+  parseReminderDays,
   recordIntake,
   reminderStatuses,
 } from '../../lib/repos/medications';
@@ -104,7 +105,7 @@ export default function HojeScreen() {
   const suppsWithReminders = meds
     .map((m) => ({
       med: m,
-      statuses: reminderStatuses(m.reminder_times, m.today_count, m.reminder_weekday),
+      statuses: reminderStatuses(m.reminder_times, m.today_count, parseReminderDays(m.reminder_days)),
     }))
     .filter((s) => s.statuses.length > 0);
   const totalReminders = suppsWithReminders.reduce((acc, s) => acc + s.statuses.length, 0);

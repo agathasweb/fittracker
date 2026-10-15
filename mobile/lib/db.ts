@@ -323,6 +323,17 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    // Lembrete em vários dias da semana (ex.: seg/qua/sex). JSON array de 0..6
+    // (Date.getDay()); NULL = todo dia. Substitui reminder_weekday (um dia só), que
+    // fica no banco sem uso.
+    version: 12,
+    sql: `
+      ALTER TABLE medications ADD COLUMN reminder_days TEXT;
+      UPDATE medications SET reminder_days = '[' || reminder_weekday || ']'
+       WHERE reminder_weekday IS NOT NULL;
+    `,
+  },
 ];
 
 async function applyMigrations(db: SQLite.SQLiteDatabase) {

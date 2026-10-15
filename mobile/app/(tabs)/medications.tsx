@@ -34,6 +34,7 @@ import {
   listMedications,
   MedicationWithToday,
   parseNotificationIds,
+  parseReminderDays,
   parseReminderTimes,
   recordIntake,
   updateMedication,
@@ -45,6 +46,13 @@ import { todayISO } from '../../lib/format';
 const COLORS = ['#A3E635', '#60A5FA', '#F472B6', '#FBBF24', '#34D399', '#A78BFA'];
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const WEEKDAYS_LONG = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+/** "Todo(a) quarta · ", "Seg, Qua, Sex · " ou "" (todo dia). */
+function daysLabel(days: number[] | null): string {
+  if (days == null) return '';
+  if (days.length === 1) return `Todo(a) ${WEEKDAYS_LONG[days[0]]} · `;
+  return `${days.map((d) => WEEKDAYS[d]).join(', ')} · `;
+}
 
 export default function MedicationsScreen() {
   const auth = useAuth();
@@ -208,7 +216,7 @@ export default function MedicationsScreen() {
 
                 {reminders.length > 0 && (
                   <Text style={styles.reminderLine}>
-                    🔔 {m.reminder_weekday != null ? `Todo(a) ${WEEKDAYS_LONG[m.reminder_weekday]} · ` : ''}
+                    🔔 {daysLabel(parseReminderDays(m.reminder_days))}
                     {reminders.join(' · ')}
                   </Text>
                 )}
@@ -272,13 +280,21 @@ type EditorProps = {
   onSaved: () => void | Promise<void>;
 };
 
+/** "Todo dia" limpa a seleção; um dia liga/desliga. Nenhum ou os 7 = todo dia. */
+function toggleDay(days: number[] | null, d: number | null): number[] | null {
+  if (d == null) return null;
+  const cur = days ?? [];
+  const next = cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].sort();
+  return next.length === 0 || next.length === 7 ? null : next;
+}
+
 function MedicationEditor({ visible, userId, editing, onClose, onSaved }: EditorProps) {
   const [name, setName] = useState(editing?.name ?? '');
   const [dosage, setDosage] = useState(editing?.dosage ?? '');
   const [notes, setNotes] = useState(editing?.notes ?? '');
   const [color, setColor] = useState(editing?.color ?? COLORS[0]);
   const [reminders, setReminders] = useState<string[]>(parseReminderTimes(editing?.reminder_times ?? null));
-  const [weekday, setWeekday] = useState<number | null>(editing?.reminder_weekday ?? null);
+  const [days, setDays] = useState<number[] | null>(parseReminderDays(editing?.reminder_days ?? null));
   const [newTime, setNewTime] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -289,7 +305,7 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
     setNotes(editing?.notes ?? '');
     setColor(editing?.color ?? COLORS[0]);
     setReminders(parseReminderTimes(editing?.reminder_times ?? null));
-    setWeekday(editing?.reminder_weekday ?? null);
+    setDays(parseReminderDays(editing?.reminder_days ?? null));
     setNewTime('');
   }, [editing]);
 
@@ -343,7 +359,7 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
           color,
           reminder_times: reminders,
           notification_ids: notificationIds,
-          reminder_weekday: weekday,
+          reminder_days: days,
         });
       } else {
         await createMedication({
@@ -354,7 +370,7 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
           color,
           reminder_times: reminders,
           notification_ids: notificationIds,
-          reminder_weekday: weekday,
+          reminder_days: days,
         });
       }
       await onSaved();
@@ -419,11 +435,11 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
             </Text>
             <View style={styles.timesRow}>
               {[null, 0, 1, 2, 3, 4, 5, 6].map((d) => {
-                const on = weekday === d;
+                const on = d == null ? days == null : !!days?.includes(d);
                 return (
                   <Pressable
                     key={String(d)}
-                    onPress={() => setWeekday(d)}
+                    onPress={() => setDays(toggleDay(days, d))}
                     style={[styles.dayChip, on && styles.dayChipOn]}
                   >
                     <Text style={[styles.dayChipText, on && styles.dayChipTextOn]}>

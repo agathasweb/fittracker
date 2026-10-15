@@ -21,6 +21,8 @@ type ImportMedication = {
   times?: string[];
   /** 0=domingo..6=sábado; ausente = todo dia. */
   weekday?: number;
+  /** Vários dias (0..6); tem precedência sobre `weekday`. */
+  weekdays?: number[];
   /** Tomadas já feitas (yyyy-MM-dd HH:mm:ss, horário local). */
   intakes?: string[];
 };
@@ -88,7 +90,7 @@ async function importar(userId: number, p: Pacote): Promise<ResultadoImport> {
       notes: m.notes ?? null,
       color: m.color ?? null,
       reminder_times: m.times ?? null,
-      reminder_weekday: m.weekday ?? null,
+      reminder_days: m.weekdays ?? (m.weekday != null ? [m.weekday] : null),
     });
     for (const at of m.intakes ?? []) await recordIntake(criado.id, at);
     existentes.add(norm(m.name));

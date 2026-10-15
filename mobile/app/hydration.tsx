@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -17,6 +18,11 @@ import { ProgressBar } from '../components/ProgressBar';
 import { useAuth } from '../lib/auth';
 import { formatTime, todayISO } from '../lib/format';
 import { useRequireAuth } from '../lib/guards';
+import {
+  HYDRATION_HOURS,
+  hydrationReminderEnabled,
+  setHydrationReminder,
+} from '../lib/hydrationReminder';
 import {
   createBottle,
   deleteBottle,
@@ -51,15 +57,18 @@ export default function HydrationScreen() {
 
   const [goalOpen, setGoalOpen] = useState(false);
   const [goalDraft, setGoalDraft] = useState('');
+  const [reminderOn, setReminderOn] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
     const day = todayISO();
-    const [bs, es, sum] = await Promise.all([
+    const [bs, es, sum, rem] = await Promise.all([
       listBottles(userId),
       listEntriesOfDay(userId, day),
       sumMlOfDay(userId, day),
+      hydrationReminderEnabled(userId),
     ]);
+    setReminderOn(rem);
     setBottles(bs);
     setEntries(es);
     setTotalMl(sum);
@@ -156,6 +165,26 @@ export default function HydrationScreen() {
         </View>
         <ProgressBar value={totalMl} max={user.daily_water_goal_ml} height={14} />
         <Text style={styles.pctLine}>{Math.round(pct * 100)}% da meta</Text>
+      </Card>
+
+      <Card>
+        <View style={styles.reminderRow}>
+          <Ionicons name="notifications-outline" size={20} color={colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.reminderTitle}>Lembrete de 2 em 2 horas</Text>
+            <Text style={styles.goalLine}>
+              {HYDRATION_HOURS.map((h) => `${String(h).padStart(2, '0')}h`).join(' · ')}
+            </Text>
+          </View>
+          <Switch
+            value={reminderOn}
+            onValueChange={async (v) => {
+              setReminderOn(v);
+              await setHydrationReminder(userId!, v);
+            }}
+            trackColor={{ true: colors.primary, false: colors.border }}
+          />
+        </View>
       </Card>
 
       <View style={styles.sectionRow}>
@@ -271,6 +300,8 @@ export default function HydrationScreen() {
 }
 
 const styles = StyleSheet.create({
+  reminderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  reminderTitle: { color: colors.text, fontWeight: '700', fontSize: 15 },
   cardLabel: {
     color: colors.textMuted,
     fontSize: 11,

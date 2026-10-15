@@ -12,6 +12,8 @@ object BpStore {
     ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
       .putString("address", address)
       .putInt("userId", userId)
+      .putLong("watchSince", System.currentTimeMillis())
+      .remove("lastAlert")
       .apply()
   }
 
@@ -77,6 +79,7 @@ object BpStore {
     val readings = WatchSync.sync(ctx, address, since)
     val added = save(ctx, userId, readings)
     setLastSync(ctx, now)
+    WatchAlert.clear(ctx)
     return added
   }
 }

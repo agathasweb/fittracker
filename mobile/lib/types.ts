@@ -130,8 +130,10 @@ export type Medication = {
   reminder_times: string | null;
   /** JSON array de IDs de notificações agendadas no expo-notifications. */
   notification_ids: string | null;
-  /** Lembrete semanal: 0=domingo..6=sábado. NULL = diário. */
+  /** Legado (v10): um dia só. Use reminder_days. */
   reminder_weekday: number | null;
+  /** JSON array de dias 0=domingo..6=sábado. NULL = todo dia. */
+  reminder_days: string | null;
   active: number;
   created_at: string;
 };

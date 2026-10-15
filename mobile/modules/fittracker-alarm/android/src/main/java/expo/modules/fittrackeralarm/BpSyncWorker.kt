@@ -18,6 +18,7 @@ class BpSyncWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params)
   } catch (e: Exception) {
     // Relógio longe/desligado: tenta de novo no próximo ciclo; não é falha do app.
     Log.w("FittrackerWatch", "worker falhou: ${e.message}")
+    WatchAlert.check(applicationContext)
     Result.success()
   }
 

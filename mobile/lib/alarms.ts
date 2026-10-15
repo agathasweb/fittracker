@@ -2,7 +2,8 @@ import { requireOptionalNativeModule } from 'expo-modules-core';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { ensurePermission } from './notifications';
-import { listMedications, parseReminderTimes } from './repos/medications';
+import { syncHydrationReminders } from './hydrationReminder';
+import { listMedications, parseReminderDays, parseReminderTimes } from './repos/medications';
 
 /**
  * Alarme de suplemento estilo despertador (Android): módulo nativo local
@@ -48,40 +49,58 @@ export async function testAlarm(seconds = 5): Promise<void> {
 
 /**
  * Reagenda os alarmes a partir do banco (fonte da verdade). Tudo que vence no mesmo
- * horário (e mesmo dia da semana) vira UM alarme listando os itens, com "Tomei todos" —
- * seis alarmes simultâneos às 07:00 seriam inviáveis. Idempotente: chamar ao abrir o
- * app e após qualquer edição.
+ * horário vira UM alarme listando os itens, com "Tomei todos" — seis alarmes simultâneos
+ * às 07:00 seriam inviáveis. Se algum item do horário só vale em certos dias, o horário
+ * vira um alarme semanal por dia, cada um com o que vale naquele dia. Idempotente:
+ * chamar ao abrir o app e após qualquer edição.
  */
 export async function syncMedicationAlarms(userId: number): Promise<void> {
-  if (!Native) return;
+  if (!Native) {
+    await syncHydrationReminders(userId);
+    return;
+  }
   await ensurePermission();
   const meds = await listMedications(userId);
 
-  type Slot = { hour: number; minute: number; weekday: number | null; time: string; items: typeof meds };
-  const slots = new Map<string, Slot>();
+  type Item = { med: (typeof meds)[number]; days: number[] | null };
+  const byTime = new Map<string, Item[]>();
   for (const m of meds) {
+    const days = parseReminderDays(m.reminder_days);
     for (const t of parseReminderTimes(m.reminder_times)) {
       const [hh, mm] = t.split(':').map(Number);
       if (!Number.isInteger(hh) || !Number.isInteger(mm)) continue;
-      const key = `${m.reminder_weekday ?? 'd'}-${t}`;
-      const slot = slots.get(key) ?? { hour: hh, minute: mm, weekday: m.reminder_weekday, time: t, items: [] };
-      slot.items.push(m);
-      slots.set(key, slot);
+      byTime.set(t, [...(byTime.get(t) ?? []), { med: m, days }]);
     }
   }
 
-  const alarms = [...slots.entries()].map(([key, s]) => ({
-    id: `slot-${key}`,
-    hour: s.hour,
-    minute: s.minute,
-    // Nativo usa Calendar (1=domingo..7=sábado); 0 = todo dia.
-    weekday: s.weekday == null ? 0 : s.weekday + 1,
-    title: s.items.length > 1 ? `${s.time} · Hora dos remédios` : `${s.time} · Hora do remédio`,
-    body: s.items.map((m) => (m.dosage ? `${m.name} — ${m.dosage}` : m.name)).join('\n'),
-    medicationIds: s.items.map((m) => m.id),
-  }));
+  const alarms = [];
+  for (const [time, items] of byTime) {
+    const [hour, minute] = time.split(':').map(Number);
+    const groups: { weekday: number | null; meds: Item['med'][] }[] = items.every((i) => i.days == null)
+      ? [{ weekday: null, meds: items.map((i) => i.med) }]
+      : [0, 1, 2, 3, 4, 5, 6]
+          .map((d) => ({
+            weekday: d as number | null,
+            meds: items.filter((i) => i.days == null || i.days.includes(d)).map((i) => i.med),
+          }))
+          .filter((g) => g.meds.length > 0);
+    for (const g of groups) {
+      alarms.push({
+        id: `slot-${g.weekday ?? 'd'}-${time}`,
+        hour,
+        minute,
+        // Nativo usa Calendar (1=domingo..7=sábado); 0 = todo dia.
+        weekday: g.weekday == null ? 0 : g.weekday + 1,
+        title: g.meds.length > 1 ? `${time} · Hora dos lembretes` : `${time} · ${g.meds[0].name}`,
+        body: g.meds.map((m) => (m.dosage ? `${m.name} — ${m.dosage}` : m.name)).join('\n'),
+        medicationIds: g.meds.map((m) => m.id),
+      });
+    }
+  }
   Native.replaceAll(JSON.stringify(alarms));
   // Migração: os lembretes antigos do expo-notifications tocariam em dobro.
   // Só suplementos agendam notificação local; push remoto não é afetado.
   await Notifications.cancelAllScheduledNotificationsAsync();
+  // O cancelAll acima também levou os de água; recria.
+  await syncHydrationReminders(userId);
 }

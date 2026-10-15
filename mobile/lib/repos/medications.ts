@@ -15,13 +15,14 @@ export type NewMedication = {
   color?: string | null;
   reminder_times?: string[] | null;
   notification_ids?: string[] | null;
-  reminder_weekday?: number | null;
+  /** Dias 0=domingo..6=sábado; null/vazio = todo dia. */
+  reminder_days?: number[] | null;
 };
 
 export type MedicationPatch = Partial<
   Pick<
     NewMedication,
-    'name' | 'dosage' | 'notes' | 'color' | 'reminder_times' | 'notification_ids' | 'reminder_weekday'
+    'name' | 'dosage' | 'notes' | 'color' | 'reminder_times' | 'notification_ids' | 'reminder_days'
   >
 > & {
   active?: 0 | 1;
@@ -40,6 +41,24 @@ export function parseReminderTimes(raw: string | null): string[] {
   } catch {
     return [];
   }
+}
+
+/** Dias da semana do lembrete (0..6, ordenados); null = todo dia. */
+export function parseReminderDays(raw: string | null): number[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const days = [...new Set(parsed.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
+    return days.length === 0 || days.length === 7 ? null : days;
+  } catch {
+    return null;
+  }
+}
+
+function serializeDays(v: number[] | null | undefined): string | null {
+  if (!v || v.length === 0 || v.length === 7) return null;
+  return JSON.stringify([...new Set(v)].sort());
 }
 
 export function parseNotificationIds(raw: string | null): string[] {
@@ -74,7 +93,7 @@ export async function createMedication(data: NewMedication): Promise<Medication>
   const db = await getDb();
   const r = await db.runAsync(
     `INSERT INTO medications
-       (user_id, name, dosage, notes, color, reminder_times, notification_ids, reminder_weekday)
+       (user_id, name, dosage, notes, color, reminder_times, notification_ids, reminder_days)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     data.user_id,
     data.name.trim(),
@@ -83,7 +102,7 @@ export async function createMedication(data: NewMedication): Promise<Medication>
     data.color ?? null,
     serializeStrArr(data.reminder_times),
     serializeStrArr(data.notification_ids),
-    data.reminder_weekday ?? null
+    serializeDays(data.reminder_days)
   );
   const created = await getMedication(r.lastInsertRowId);
   if (!created) throw new Error('Falha ao criar suplemento');
@@ -101,6 +120,8 @@ export async function updateMedication(id: number, patch: MedicationPatch): Prom
     const v = (patch as any)[k];
     if (k === 'reminder_times' || k === 'notification_ids') {
       values.push(serializeStrArr(v));
+    } else if (k === 'reminder_days') {
+      values.push(serializeDays(v));
     } else {
       values.push(v);
     }
@@ -166,10 +187,10 @@ export type ReminderStatus = {
 export function reminderStatuses(
   reminderTimesRaw: string | null,
   todayCount: number,
-  weekday: number | null = null
+  days: number[] | null = null
 ): ReminderStatus[] {
-  // Semanal fora do dia: nada previsto pra hoje.
-  if (weekday != null && weekday !== new Date().getDay()) return [];
+  // Fora dos dias marcados: nada previsto pra hoje.
+  if (days != null && !days.includes(new Date().getDay())) return [];
   const times = parseReminderTimes(reminderTimesRaw).sort();
   return times.map((time, idx) => ({ time, taken: idx < todayCount }));
 }
