@@ -76,6 +76,9 @@ jobs:
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          # Sem VCS o EAS empacota a pasta como está (respeitando o .easignore); no modo
+          # git ele só envia arquivos rastreados e o google-services.json ficaria de fora.
+          EAS_NO_VCS: '1'
         run: |
           eas build \
             --platform android \
