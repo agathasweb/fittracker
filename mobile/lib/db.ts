@@ -257,6 +257,72 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX idx_protein_entries_user_day ON protein_entries(user_id, consumed_at);
     `,
   },
+  {
+    // Pressão arterial estilo MAPA. source='watch' vem do relógio (gravado pelo módulo
+    // nativo, inclusive com o app fechado); 'manual' é lançamento à mão. O índice único
+    // deixa a sync reenviar o mesmo horário sem duplicar (INSERT OR IGNORE).
+    version: 9,
+    sql: `
+      CREATE TABLE blood_pressure_readings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        measured_at TEXT NOT NULL,
+        systolic INTEGER NOT NULL,
+        diastolic INTEGER NOT NULL,
+        heart_rate INTEGER,
+        source TEXT NOT NULL DEFAULT 'manual'
+      );
+      CREATE UNIQUE INDEX idx_bp_unique ON blood_pressure_readings(user_id, measured_at, source);
+    `,
+  },
+  {
+    // Lembrete semanal (ex.: injeção toda quarta). 0=domingo..6=sábado (Date.getDay());
+    // NULL = todo dia, como antes.
+    version: 10,
+    sql: `ALTER TABLE medications ADD COLUMN reminder_weekday INTEGER;`,
+  },
+  {
+    // Exames e documentos médicos: cabeçalho, valores (marcadores) e anexos (foto/PDF
+    // copiados pra documentDirectory/exams). Marcador por nome livre — a evolução
+    // agrupa pelo nome normalizado.
+    version: 11,
+    sql: `
+      CREATE TABLE exams (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        exam_date TEXT NOT NULL,
+        title TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'laboratorio',
+        place TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_exams_user_date ON exams(user_id, exam_date);
+
+      CREATE TABLE exam_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+        marker TEXT NOT NULL,
+        value REAL,
+        value_text TEXT,
+        unit TEXT,
+        reference TEXT,
+        flag TEXT,
+        position INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX idx_exam_results_exam ON exam_results(exam_id, position);
+      CREATE INDEX idx_exam_results_marker ON exam_results(marker);
+
+      CREATE TABLE exam_files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+        uri TEXT NOT NULL,
+        name TEXT NOT NULL,
+        mime TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 async function applyMigrations(db: SQLite.SQLiteDatabase) {

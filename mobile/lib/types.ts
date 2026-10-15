@@ -130,6 +130,8 @@ export type Medication = {
   reminder_times: string | null;
   /** JSON array de IDs de notificações agendadas no expo-notifications. */
   notification_ids: string | null;
+  /** Lembrete semanal: 0=domingo..6=sábado. NULL = diário. */
+  reminder_weekday: number | null;
   active: number;
   created_at: string;
 };
@@ -256,4 +258,60 @@ export type ProteinEntry = {
   label: string;
   protein_g: number;
   consumed_at: string;
+};
+
+export type BloodPressureReading = {
+  id: number;
+  user_id: number;
+  /** yyyy-MM-dd HH:mm:ss, horário local. Leituras do relógio caem na hora cheia. */
+  measured_at: string;
+  systolic: number;
+  diastolic: number;
+  heart_rate: number | null;
+  source: 'watch' | 'manual';
+};
+
+export type ExamCategory =
+  | 'laboratorio'
+  | 'imagem'
+  | 'bioimpedancia'
+  | 'pressao'
+  | 'receita'
+  | 'outro';
+
+export type Exam = {
+  id: number;
+  user_id: number;
+  /** yyyy-MM-dd */
+  exam_date: string;
+  title: string;
+  category: ExamCategory;
+  place: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+/** flag: avaliação contra a referência do laudo. */
+export type ExamFlag = 'normal' | 'alto' | 'baixo' | 'alterado';
+
+export type ExamResult = {
+  id: number;
+  exam_id: number;
+  marker: string;
+  /** Numérico quando dá (permite evolução); senão value_text (ex.: "Moderada (grau II)"). */
+  value: number | null;
+  value_text: string | null;
+  unit: string | null;
+  reference: string | null;
+  flag: ExamFlag | null;
+  position: number;
+};
+
+export type ExamFile = {
+  id: number;
+  exam_id: number;
+  uri: string;
+  name: string;
+  mime: string;
+  created_at: string;
 };

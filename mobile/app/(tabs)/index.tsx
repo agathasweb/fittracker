@@ -14,7 +14,7 @@ import {
 import { Card } from '../../components/Card';
 import { ProgressBar } from '../../components/ProgressBar';
 import { useAuth } from '../../lib/auth';
-import { ageFromBirth, tmb, todayISO } from '../../lib/format';
+import { ageFromBirth, formatTime, tmb, todayISO } from '../../lib/format';
 import { listFavoriteBottles } from '../../lib/repos/bottles';
 import { addEntry, sumMlOfDay } from '../../lib/repos/hydration';
 import {
@@ -24,8 +24,9 @@ import {
   reminderStatuses,
 } from '../../lib/repos/medications';
 import { listSources, logSource, sumProteinOfDay } from '../../lib/repos/protein';
+import { lastReading } from '../../lib/repos/bloodPressure';
 import { colors, radius, spacing } from '../../lib/theme';
-import { Bottle, ProteinSource } from '../../lib/types';
+import { BloodPressureReading, Bottle, ProteinSource } from '../../lib/types';
 
 export default function HojeScreen() {
   const auth = useAuth();
@@ -35,6 +36,7 @@ export default function HojeScreen() {
   const [hydrationMl, setHydrationMl] = useState(0);
   const [proteinG, setProteinG] = useState(0);
   const [proteinSources, setProteinSources] = useState<ProteinSource[]>([]);
+  const [bp, setBp] = useState<BloodPressureReading | null>(null);
   const [meds, setMeds] = useState<MedicationWithToday[]>([]);
 
   const userId = auth.status === 'authed' ? auth.user.id : null;
@@ -43,13 +45,15 @@ export default function HojeScreen() {
   const load = useCallback(async () => {
     if (!userId) return;
     const day = todayISO();
-    const [favs, ml, protein, sources, supps] = await Promise.all([
+    const [favs, ml, protein, sources, supps, lastBp] = await Promise.all([
       listFavoriteBottles(userId),
       sumMlOfDay(userId, day),
       sumProteinOfDay(userId, day),
       listSources(userId),
       listMedications(userId),
+      lastReading(userId),
     ]);
+    setBp(lastBp);
     setFavorites(favs);
     setHydrationMl(ml);
     setProteinG(protein);
@@ -100,7 +104,7 @@ export default function HojeScreen() {
   const suppsWithReminders = meds
     .map((m) => ({
       med: m,
-      statuses: reminderStatuses(m.reminder_times, m.today_count),
+      statuses: reminderStatuses(m.reminder_times, m.today_count, m.reminder_weekday),
     }))
     .filter((s) => s.statuses.length > 0);
   const totalReminders = suppsWithReminders.reduce((acc, s) => acc + s.statuses.length, 0);
@@ -199,6 +203,32 @@ export default function HojeScreen() {
                 </Text>
               </Pressable>
             ))}
+          </View>
+        </Card>
+      </Pressable>
+
+      <Pressable onPress={() => router.push('/blood-pressure')}>
+        <Card>
+          <View style={styles.hydrationHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardLabel}>PRESSÃO ARTERIAL</Text>
+              {bp ? (
+                <>
+                  <Text style={styles.hydrationValue}>
+                    {bp.systolic}/{bp.diastolic} <Text style={styles.hydrationUnit}>mmHg</Text>
+                  </Text>
+                  <Text style={styles.hydrationGoal}>
+                    {bp.measured_at.slice(0, 10) === todayISO()
+                      ? `hoje às ${formatTime(bp.measured_at)}`
+                      : `em ${bp.measured_at.slice(8, 10)}/${bp.measured_at.slice(5, 7)} às ${formatTime(bp.measured_at)}`}
+                    {bp.source === 'watch' ? ' · relógio' : ''}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.hydrationGoal}>Toque pra conectar o relógio ou lançar uma medição</Text>
+              )}
+            </View>
+            <Ionicons name="heart" size={42} color={colors.danger} />
           </View>
         </Card>
       </Pressable>

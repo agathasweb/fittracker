@@ -25,6 +25,7 @@ import { apiBackupKey } from '../../lib/api';
 import { logout, useAuth } from '../../lib/auth';
 import { backupDisponivel, fazerBackup, restaurarBackup } from '../../lib/backup';
 import { getToken } from '../../lib/entitlement';
+import { escolherEImportar } from '../../lib/importData';
 import { ageFromBirth } from '../../lib/format';
 import { usePushToken } from '../../lib/push';
 import * as deepseek from '../../lib/ai/deepseek';
@@ -69,6 +70,22 @@ export default function ProfileScreen() {
   async function onLogout() {
     await logout();
     router.replace('/auth/login');
+  }
+
+  async function onImport() {
+    try {
+      const r = await escolherEImportar(u.id);
+      if (!r) return;
+      const linhas = [
+        `${r.medsCriados} remédio(s)/suplemento(s) com alarme`,
+        `${r.examesCriados} exame(s)/documento(s), ${r.anexos} anexo(s)`,
+      ];
+      if (r.medsPulados.length) linhas.push(`Já existiam (mantidos): ${r.medsPulados.join(', ')}`);
+      if (r.examesPulados) linhas.push(`${r.examesPulados} exame(s) já importado(s) antes`);
+      Alert.alert('Importação concluída', linhas.join('\n'));
+    } catch (e: any) {
+      Alert.alert('Não deu pra importar', e?.message ?? 'Erro inesperado.');
+    }
   }
 
   async function pickFromSource(source: 'camera' | 'library') {
@@ -190,6 +207,15 @@ export default function ProfileScreen() {
       <PushTokenCard />
 
       <BackupCard />
+
+      <Card title="Saúde">
+        <MenuRow
+          icon="document-text-outline"
+          text="Exames e documentos"
+          onPress={() => router.push('/exams')}
+        />
+        <MenuRow icon="download-outline" text="Importar arquivo de dados" onPress={onImport} />
+      </Card>
 
       <Card title="Conta">
         <MenuRow

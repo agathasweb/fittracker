@@ -3,15 +3,27 @@ import { nowISO } from '../format';
 import { ProteinEntry, ProteinSource } from '../types';
 
 /**
- * Fontes iniciais (prescrição do médico: ovos, carne, whey, YoPro, Hidro Protein).
- * Gramas são referência média — o usuário ajusta pelo rótulo na tela de Proteína.
+ * Fontes iniciais — tabela do protocolo do médico (ovo 6 g; bife 30–40 g/100 g; whey 30 g;
+ * YoPro/iogurte proteico 15–25 g; Hidro Protein 20 g). Faixas viram o valor do meio;
+ * o usuário ajusta pelo rótulo na tela de Proteína.
  */
 const DEFAULT_SOURCES: { name: string; portion: string; protein_g: number }[] = [
   { name: 'Ovo', portion: '1 unidade', protein_g: 6 },
-  { name: 'Carne', portion: '100 g', protein_g: 26 },
-  { name: 'Whey', portion: '1 scoop (30 g)', protein_g: 24 },
-  { name: 'YoPro', portion: '1 unidade', protein_g: 15 },
-  { name: 'Hidro Protein', portion: '1 unidade', protein_g: 15 },
+  { name: 'Carne', portion: '100 g (bife)', protein_g: 35 },
+  { name: 'Whey', portion: '1 dose', protein_g: 30 },
+  { name: 'YoPro', portion: '1 unidade', protein_g: 20 },
+  { name: 'Hidro Protein', portion: '1 unidade', protein_g: 20 },
+];
+
+/**
+ * A 1ª versão semeou valores abaixo da tabela do médico. Corrige só as fontes que
+ * continuam exatamente como semeadas (nome + gramas antigas) — editadas pelo usuário ficam.
+ */
+const CORRECOES_V1: { name: string; de: number; para: number; portion: string }[] = [
+  { name: 'Carne', de: 26, para: 35, portion: '100 g (bife)' },
+  { name: 'Whey', de: 24, para: 30, portion: '1 dose' },
+  { name: 'YoPro', de: 15, para: 20, portion: '1 unidade' },
+  { name: 'Hidro Protein', de: 15, para: 20, portion: '1 unidade' },
 ];
 
 /** Lista as fontes do usuário, semeando as padrão na primeira vez. */
@@ -21,7 +33,25 @@ export async function listSources(userId: number): Promise<ProteinSource[]> {
     'SELECT * FROM protein_sources WHERE user_id = ? ORDER BY sort_order, id',
     userId
   );
-  if (rows.length > 0) return rows;
+  if (rows.length > 0) {
+    let mudou = false;
+    for (const c of CORRECOES_V1) {
+      const r = await db.runAsync(
+        'UPDATE protein_sources SET protein_g = ?, portion = ? WHERE user_id = ? AND name = ? AND protein_g = ?',
+        c.para,
+        c.portion,
+        userId,
+        c.name,
+        c.de
+      );
+      if (r.changes > 0) mudou = true;
+    }
+    if (!mudou) return rows;
+    return db.getAllAsync<ProteinSource>(
+      'SELECT * FROM protein_sources WHERE user_id = ? ORDER BY sort_order, id',
+      userId
+    );
+  }
   const seeded = await db.getFirstAsync<{ n: number }>(
     'SELECT COUNT(*) AS n FROM protein_entries WHERE user_id = ?',
     userId

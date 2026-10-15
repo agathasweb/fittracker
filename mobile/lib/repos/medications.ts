@@ -15,10 +15,14 @@ export type NewMedication = {
   color?: string | null;
   reminder_times?: string[] | null;
   notification_ids?: string[] | null;
+  reminder_weekday?: number | null;
 };
 
 export type MedicationPatch = Partial<
-  Pick<NewMedication, 'name' | 'dosage' | 'notes' | 'color' | 'reminder_times' | 'notification_ids'>
+  Pick<
+    NewMedication,
+    'name' | 'dosage' | 'notes' | 'color' | 'reminder_times' | 'notification_ids' | 'reminder_weekday'
+  >
 > & {
   active?: 0 | 1;
 };
@@ -70,15 +74,16 @@ export async function createMedication(data: NewMedication): Promise<Medication>
   const db = await getDb();
   const r = await db.runAsync(
     `INSERT INTO medications
-       (user_id, name, dosage, notes, color, reminder_times, notification_ids)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       (user_id, name, dosage, notes, color, reminder_times, notification_ids, reminder_weekday)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     data.user_id,
     data.name.trim(),
     data.dosage?.trim() || null,
     data.notes?.trim() || null,
     data.color ?? null,
     serializeStrArr(data.reminder_times),
-    serializeStrArr(data.notification_ids)
+    serializeStrArr(data.notification_ids),
+    data.reminder_weekday ?? null
   );
   const created = await getMedication(r.lastInsertRowId);
   if (!created) throw new Error('Falha ao criar suplemento');
@@ -160,8 +165,11 @@ export type ReminderStatus = {
  */
 export function reminderStatuses(
   reminderTimesRaw: string | null,
-  todayCount: number
+  todayCount: number,
+  weekday: number | null = null
 ): ReminderStatus[] {
+  // Semanal fora do dia: nada previsto pra hoje.
+  if (weekday != null && weekday !== new Date().getDay()) return [];
   const times = parseReminderTimes(reminderTimesRaw).sort();
   return times.map((time, idx) => ({ time, taken: idx < todayCount }));
 }

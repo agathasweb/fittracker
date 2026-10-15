@@ -70,7 +70,7 @@ jobs:
         run: |
           eas build \
             --platform android \
-            --profile production \
+            --profile production-apk \
             --non-interactive \
             --wait \
             --json > build-result.json

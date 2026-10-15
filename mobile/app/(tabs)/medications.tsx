@@ -17,6 +17,14 @@ import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
 import { useAuth } from '../../lib/auth';
 import { formatTime } from '../../lib/format';
+import {
+  AlarmPermissions,
+  alarmPermissions,
+  openExactAlarmSettings,
+  openFullScreenSettings,
+  syncMedicationAlarms,
+  testAlarm,
+} from '../../lib/alarms';
 import { rescheduleMedicationReminders } from '../../lib/notifications';
 import {
   createMedication,
@@ -35,6 +43,8 @@ import { Medication, MedicationIntake } from '../../lib/types';
 import { todayISO } from '../../lib/format';
 
 const COLORS = ['#A3E635', '#60A5FA', '#F472B6', '#FBBF24', '#34D399', '#A78BFA'];
+const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const WEEKDAYS_LONG = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 export default function MedicationsScreen() {
   const auth = useAuth();
@@ -44,10 +54,13 @@ export default function MedicationsScreen() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Medication | null>(null);
   const [historyMed, setHistoryMed] = useState<MedicationWithToday | null>(null);
+  const [perms, setPerms] = useState<AlarmPermissions | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
     setMeds(await listMedications(userId));
+    // Rechecado a cada foco: o usuário volta das Configurações depois de liberar.
+    setPerms(alarmPermissions());
   }, [userId]);
 
   useFocusEffect(
@@ -79,6 +92,7 @@ export default function MedicationsScreen() {
               await cancelNotifications(ids);
             }
             await deleteMedication(m.id);
+            await syncMedicationAlarms(userId!);
             await load();
           },
         },
@@ -92,6 +106,43 @@ export default function MedicationsScreen() {
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
       >
+        {perms && (!perms.exact || !perms.fullScreen) && (
+          <Card style={styles.permCard}>
+            <Text style={styles.permTitle}>⏰ Libere o alarme</Text>
+            <Text style={styles.permText}>
+              Pra os lembretes tocarem como despertador, na hora certa e com a tela acesa, o
+              Android precisa destas permissões:
+            </Text>
+            {!perms.exact && (
+              <Button
+                title="Permitir alarmes exatos"
+                variant="secondary"
+                onPress={openExactAlarmSettings}
+                style={{ marginTop: spacing.sm }}
+              />
+            )}
+            {!perms.fullScreen && (
+              <Button
+                title="Permitir alarme em tela cheia"
+                variant="secondary"
+                onPress={openFullScreenSettings}
+                style={{ marginTop: spacing.sm }}
+              />
+            )}
+          </Card>
+        )}
+        {perms && meds.some((m) => parseReminderTimes(m.reminder_times).length > 0) && (
+          <Pressable
+            onPress={async () => {
+              await testAlarm(5);
+              Alert.alert('Alarme de teste', 'Vai tocar em 5 segundos. Pode bloquear a tela pra ver.');
+            }}
+            style={styles.testBtn}
+          >
+            <Ionicons name="alarm-outline" size={16} color={colors.primary} />
+            <Text style={styles.testBtnText}>Testar alarme</Text>
+          </Pressable>
+        )}
         {meds.length === 0 ? (
           <Card>
             <View style={{ alignItems: 'center', paddingVertical: spacing.md }}>
@@ -157,7 +208,8 @@ export default function MedicationsScreen() {
 
                 {reminders.length > 0 && (
                   <Text style={styles.reminderLine}>
-                    🔔 {reminders.join(' · ')}
+                    🔔 {m.reminder_weekday != null ? `Todo(a) ${WEEKDAYS_LONG[m.reminder_weekday]} · ` : ''}
+                    {reminders.join(' · ')}
                   </Text>
                 )}
 
@@ -198,6 +250,7 @@ export default function MedicationsScreen() {
         onClose={() => setEditorOpen(false)}
         onSaved={async () => {
           setEditorOpen(false);
+          await syncMedicationAlarms(userId);
           await load();
         }}
       />
@@ -225,6 +278,7 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
   const [notes, setNotes] = useState(editing?.notes ?? '');
   const [color, setColor] = useState(editing?.color ?? COLORS[0]);
   const [reminders, setReminders] = useState<string[]>(parseReminderTimes(editing?.reminder_times ?? null));
+  const [weekday, setWeekday] = useState<number | null>(editing?.reminder_weekday ?? null);
   const [newTime, setNewTime] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -235,6 +289,7 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
     setNotes(editing?.notes ?? '');
     setColor(editing?.color ?? COLORS[0]);
     setReminders(parseReminderTimes(editing?.reminder_times ?? null));
+    setWeekday(editing?.reminder_weekday ?? null);
     setNewTime('');
   }, [editing]);
 
@@ -288,6 +343,7 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
           color,
           reminder_times: reminders,
           notification_ids: notificationIds,
+          reminder_weekday: weekday,
         });
       } else {
         await createMedication({
@@ -298,6 +354,7 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
           color,
           reminder_times: reminders,
           notification_ids: notificationIds,
+          reminder_weekday: weekday,
         });
       }
       await onSaved();
@@ -358,8 +415,24 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
 
             <Text style={styles.fieldLabel}>Lembretes (opcional)</Text>
             <Text style={styles.helperText}>
-              Horários pra notificação diária. Deixe vazio se não quiser lembrete.
+              Toca como despertador. Deixe sem horário se não quiser lembrete.
             </Text>
+            <View style={styles.timesRow}>
+              {[null, 0, 1, 2, 3, 4, 5, 6].map((d) => {
+                const on = weekday === d;
+                return (
+                  <Pressable
+                    key={String(d)}
+                    onPress={() => setWeekday(d)}
+                    style={[styles.dayChip, on && styles.dayChipOn]}
+                  >
+                    <Text style={[styles.dayChipText, on && styles.dayChipTextOn]}>
+                      {d == null ? 'Todo dia' : WEEKDAYS[d]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <View style={styles.timesRow}>
               {reminders.map((t) => (
                 <Pressable
@@ -459,6 +532,28 @@ function IntakesHistoryModal({ med, onClose, onChanged }: HistoryProps) {
 }
 
 const styles = StyleSheet.create({
+  dayChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dayChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  dayChipText: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+  dayChipTextOn: { color: colors.bg },
+  permCard: { borderColor: colors.warning },
+  permTitle: { color: colors.text, fontWeight: '700', fontSize: 15, marginBottom: 4 },
+  permText: { color: colors.textMuted, fontSize: 13 },
+  testBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 4,
+    padding: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  testBtnText: { color: colors.primary, fontWeight: '700' },
   emptyTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginTop: spacing.sm },
   emptySub: { color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs, paddingHorizontal: spacing.md },
   medHeader: {

@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { alarmsAvailable } from './alarms';
 
 let configured = false;
 
@@ -81,6 +82,8 @@ export async function rescheduleMedicationReminders(
   times: string[]
 ): Promise<string[]> {
   if (oldIds.length) await cancelNotifications(oldIds);
+  // Com o alarme nativo, quem agenda é o syncMedicationAlarms() (lib/alarms.ts).
+  if (alarmsAvailable()) return [];
   if (!times.length) return [];
   const title = 'Hora do suplemento';
   const body = dosage ? `${name} — ${dosage}` : name;

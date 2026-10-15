@@ -65,16 +65,21 @@ export async function firstActivityDate(userId: number): Promise<string | null> 
  * histórico de mudança de horário/ativação. Bom o suficiente pra "bateu a meta?".
  */
 async function expectedDosesByDay(userId: number): Promise<
-  { created: string; times: number }[]
+  { created: string; times: number; weekday: number | null }[]
 > {
   const db = await getDb();
-  const rows = await db.getAllAsync<{ created_at: string; reminder_times: string | null }>(
-    'SELECT created_at, reminder_times FROM medications WHERE user_id = ? AND active = 1',
+  const rows = await db.getAllAsync<{
+    created_at: string;
+    reminder_times: string | null;
+    reminder_weekday: number | null;
+  }>(
+    'SELECT created_at, reminder_times, reminder_weekday FROM medications WHERE user_id = ? AND active = 1',
     userId
   );
   return rows.map((r) => ({
     created: r.created_at.slice(0, 10),
     times: contarHorarios(r.reminder_times),
+    weekday: r.reminder_weekday,
   }));
 }
 
@@ -137,8 +142,9 @@ export async function dailyRecords(
     const workout_kcal = Math.round((kcalCardio.get(date) ?? 0) + (kcalMusculacao.get(date) ?? 0));
     const supp_consumed = Math.round(dosesTomadas.get(date) ?? 0);
     // Meta do dia: doses agendadas dos suplementos que já existiam nesse dia.
+    const dow = new Date(`${date}T12:00:00`).getDay();
     const supp_expected = suplementosAtivos
-      .filter((s) => s.created <= date)
+      .filter((s) => s.created <= date && (s.weekday == null || s.weekday === dow))
       .reduce((acc, s) => acc + s.times, 0);
     out.push({
       date,

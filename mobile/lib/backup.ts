@@ -58,20 +58,21 @@ export async function fazerBackup(): Promise<ResultadoBackup> {
     throw e;
   }
 
-  // Fecha e faz checkpoint: sem isso o WAL fica de fora e o backup sai velho.
-  await closeDb();
-
-  const info = await FileSystem.getInfoAsync(DB_PATH);
-  if (!info.exists) {
-    await getDb(); // reabre antes de desistir
-    return { status: 'pulado', motivo: 'sem_sessao' };
+  // Cópia consistente (já com o WAL) SEM fechar a conexão. Fechar o banco aqui
+  // derrubava o app (SIGSEGV no expo-sqlite) quando outra tela estava no meio de
+  // uma consulta — e o backup diário roda justamente na abertura do app.
+  const snapUri = `${FileSystem.cacheDirectory}snapshot-${Date.now()}.db`;
+  let conteudo: string;
+  try {
+    const db = await getDb();
+    const snapPath = decodeURIComponent(snapUri.replace(/^file:\/\//, ''));
+    await db.execAsync(`VACUUM INTO '${snapPath.replace(/'/g, "''")}'`);
+    conteudo = await FileSystem.readAsStringAsync(snapUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+  } finally {
+    await FileSystem.deleteAsync(snapUri, { idempotent: true });
   }
-
-  const conteudo = await FileSystem.readAsStringAsync(DB_PATH, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
-  await getDb(); // reabre assim que o arquivo foi lido
 
   const envelope = cifrar(conteudo, chave);
   const sha = await sha256Hex(envelope);

@@ -7,6 +7,7 @@ import { UpdateBanner } from '../../components/UpdateBanner';
 import { colors } from '../../lib/theme';
 import { useRequireAuth } from '../../lib/guards';
 import { registerForPushNotificationsAsync } from '../../lib/push';
+import { syncMedicationAlarms } from '../../lib/alarms';
 
 export default function TabsLayout() {
   const auth = useRequireAuth();
@@ -20,6 +21,8 @@ export default function TabsLayout() {
         userName: authedUser.name,
         userEmail: authedUser.email,
       });
+      // Migra lembretes antigos pro alarme nativo e reagenda (idempotente).
+      syncMedicationAlarms(authedUser.id).catch(() => {});
     }
   }, [authedUser?.id]);
 
