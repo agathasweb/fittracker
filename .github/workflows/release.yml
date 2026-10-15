@@ -63,6 +63,15 @@ jobs:
         working-directory: mobile
         run: npm ci --legacy-peer-deps
 
+      - name: Restore google-services.json
+        working-directory: mobile
+        env:
+          GOOGLE_SERVICES_JSON_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          # Fora do git (repo público); o .easignore deixa o EAS enviar o arquivo.
+          echo "$GOOGLE_SERVICES_JSON_B64" | base64 -d > google-services.json
+          python3 -c "import json; json.load(open('google-services.json'))"
+
       - name: Build Android (production)
         working-directory: mobile
         env:

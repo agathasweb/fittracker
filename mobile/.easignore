@@ -1,0 +1,14 @@
+# Com este arquivo o EAS ignora o .gitignore. Existe pra o build por tag (GitHub
+# Actions) enviar o google-services.json, que o workflow recria a partir de um
+# secret — ele fica fora do git porque o repositório é público.
+node_modules/
+.expo/
+dist/
+web-build/
+android/
+ios/
+.env
+.env.local
+*.log
+.DS_Store
+play-service-account.json
