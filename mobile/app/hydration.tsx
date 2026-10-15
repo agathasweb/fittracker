@@ -18,6 +18,7 @@ import { ProgressBar } from '../components/ProgressBar';
 import { useAuth } from '../lib/auth';
 import { formatTime, todayISO } from '../lib/format';
 import { useRequireAuth } from '../lib/guards';
+import { syncMedicationAlarms } from '../lib/alarms';
 import {
   HYDRATION_HOURS,
   hydrationReminderEnabled,
@@ -181,6 +182,7 @@ export default function HydrationScreen() {
             onValueChange={async (v) => {
               setReminderOn(v);
               await setHydrationReminder(userId!, v);
+              await syncMedicationAlarms(userId!);
             }}
             trackColor={{ true: colors.primary, false: colors.border }}
           />

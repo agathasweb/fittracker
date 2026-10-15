@@ -23,6 +23,9 @@ import {
   addManualReading,
   deleteReading,
   listReadingsOfDay,
+  listWatchHoursOfDay,
+  WatchHour,
+  watchStepsOfDay,
 } from '../lib/repos/bloodPressure';
 import { colors, radius, spacing } from '../lib/theme';
 import { BloodPressureReading } from '../lib/types';
@@ -30,10 +33,13 @@ import {
   getWatch,
   lastWatchSync,
   listWatchCandidates,
+  measureWatchNow,
+  sendWatchTestMessage,
   setWatch,
   syncWatchNow,
   watchAvailable,
   WatchDevice,
+  watchExtrasAvailable,
 } from '../lib/watch';
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
@@ -58,6 +64,9 @@ export default function BloodPressureScreen() {
   const [watch, setWatchState] = useState<WatchDevice | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [hours, setHours] = useState<WatchHour[]>([]);
+  const [steps, setSteps] = useState(0);
+  const [measuring, setMeasuring] = useState(false);
 
   const [pickOpen, setPickOpen] = useState(false);
   const [candidates, setCandidates] = useState<WatchDevice[]>([]);
@@ -71,6 +80,8 @@ export default function BloodPressureScreen() {
   const load = useCallback(async () => {
     if (!userId) return;
     setReadings(await listReadingsOfDay(userId, day));
+    setHours(await listWatchHoursOfDay(userId, day));
+    setSteps(await watchStepsOfDay(userId, day));
     setWatchState(await getWatch());
     setLastSync(lastWatchSync());
   }, [userId, day]);
@@ -95,6 +106,33 @@ export default function BloodPressureScreen() {
       Alert.alert('Não deu pra sincronizar', e?.message ?? 'Verifique se o relógio está perto e com Bluetooth.');
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function measureNow() {
+    setMeasuring(true);
+    try {
+      const r = await measureWatchNow();
+      await load();
+      Alert.alert(
+        r ? 'Pressão medida' : 'Sem leitura',
+        r
+          ? `${r.systolic}/${r.diastolic} mmHg — já está na hora de agora.`
+          : 'O relógio não devolveu a medição. Confira se ele está bem ajustado no pulso e tente de novo.'
+      );
+    } catch (e: any) {
+      Alert.alert('Não deu pra medir', e?.message ?? 'Verifique se o relógio está perto e com Bluetooth.');
+    } finally {
+      setMeasuring(false);
+    }
+  }
+
+  async function testMessage() {
+    try {
+      await sendWatchTestMessage();
+      Alert.alert('Mensagem enviada', 'Confira se apareceu no relógio.');
+    } catch (e: any) {
+      Alert.alert('Não deu pra enviar', e?.message ?? 'Verifique se o relógio está perto e com Bluetooth.');
     }
   }
 
@@ -153,6 +191,8 @@ export default function BloodPressureScreen() {
   // Uma linha por hora; se houver mais de uma leitura na hora, mostra a mais recente.
   const byHour = new Map<number, BloodPressureReading>();
   for (const r of readings) byHour.set(Number(r.measured_at.slice(11, 13)), r);
+  const watchByHour = new Map<number, WatchHour>();
+  for (const w of hours) watchByHour.set(Number(w.hour_at.slice(11, 13)), w);
   const awake = readings.filter((r) => isAwake(Number(r.measured_at.slice(11, 13))));
   const asleep = readings.filter((r) => !isAwake(Number(r.measured_at.slice(11, 13))));
 
@@ -177,6 +217,17 @@ export default function BloodPressureScreen() {
                 />
                 <Button title="Trocar" variant="secondary" onPress={openPicker} style={{ flex: 0.6 }} />
               </View>
+              {watchExtrasAvailable() && (
+                <View style={styles.row}>
+                  <Button
+                    title={measuring ? 'Medindo (~1 min)…' : 'Medir agora'}
+                    onPress={measureNow}
+                    loading={measuring}
+                    style={{ flex: 1 }}
+                  />
+                  <Button title="Testar mensagem" variant="secondary" onPress={testMessage} style={{ flex: 1 }} />
+                </View>
+              )}
             </>
           ) : (
             <>
@@ -220,11 +271,17 @@ export default function BloodPressureScreen() {
             <Text style={styles.sumValue}>{avg(asleep) ?? '—'}</Text>
           </View>
         </View>
+        {hours.length > 0 && (
+          <Text style={[styles.muted, { marginTop: spacing.sm, textAlign: 'center' }]}>
+            👟 {steps.toLocaleString('pt-BR')} passos no dia (relógio)
+          </Text>
+        )}
       </Card>
 
       <Card>
         {HOURS.map((h) => {
           const r = byHour.get(h);
+          const wh = watchByHour.get(h);
           return (
             <Pressable
               key={h}
@@ -237,13 +294,26 @@ export default function BloodPressureScreen() {
                   <Text style={styles.bp}>
                     {r.systolic}/{r.diastolic}
                   </Text>
-                  <Text style={styles.hr}>{r.heart_rate ? `FC ${r.heart_rate}` : ''}</Text>
+                  <Text style={styles.hr}>
+                    {[
+                      r.heart_rate ?? wh?.heart_rate ? `FC ${r.heart_rate ?? wh?.heart_rate}` : '',
+                      wh?.spo2 ? `SpO2 ${wh.spo2}%` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
                   <Ionicons
                     name={r.source === 'watch' ? 'watch-outline' : 'create-outline'}
                     size={16}
                     color={colors.textMuted}
                   />
                 </>
+              ) : wh?.heart_rate || wh?.spo2 ? (
+                <Text style={styles.hr}>
+                  {[wh.heart_rate ? `FC ${wh.heart_rate}` : '', wh.spo2 ? `SpO2 ${wh.spo2}%` : '']
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
               ) : (
                 <Text style={styles.blank}>—</Text>
               )}

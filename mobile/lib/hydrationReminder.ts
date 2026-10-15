@@ -5,10 +5,13 @@ import { ensurePermission } from './notifications';
 
 /**
  * Lembrete de água: notificação comum (não o alarme de tela cheia) a cada 2 h,
- * das 08:00 às 22:00. Liga/desliga por usuário na tela Hidratação; agendado como
- * gatilhos diários com identificador próprio, pra não colidir com os suplementos.
+ * das 08:00 às 22:00. Liga/desliga por usuário na tela Hidratação. Com o módulo nativo
+ * novo, quem agenda é o syncMedicationAlarms (e a mensagem também vai pro relógio);
+ * senão, gatilhos diários do expo-notifications com identificador próprio.
  */
 export const HYDRATION_HOURS = [8, 10, 12, 14, 16, 18, 20, 22];
+export const HYDRATION_TITLE = '💧 Hora de beber água';
+export const HYDRATION_BODY = 'Beba um copo agora e registre no FitTracker.';
 const CHANNEL = 'hydration';
 const key = (userId: number) => `hydration_reminder:${userId}`;
 const ident = (h: number) => `hydration-${String(h).padStart(2, '0')}`;
@@ -21,18 +24,21 @@ export async function hydrationReminderEnabled(userId: number): Promise<boolean>
   }
 }
 
+/** Só grava a preferência; quem agenda é o syncMedicationAlarms (chamar em seguida). */
 export async function setHydrationReminder(userId: number, on: boolean): Promise<void> {
   await AsyncStorage.setItem(key(userId), on ? '1' : '0');
-  await syncHydrationReminders(userId);
 }
 
-/** Idempotente: cancela os gatilhos de água e recria se estiver ligado. */
-export async function syncHydrationReminders(userId: number): Promise<void> {
+/**
+ * Agenda pelo expo-notifications (sem módulo nativo novo). Idempotente: cancela os
+ * gatilhos de água e recria se `enabled`.
+ */
+export async function syncHydrationReminders(userId: number, enabled = true): Promise<void> {
   if (Platform.OS === 'web') return;
   await Promise.all(
     HYDRATION_HOURS.map((h) => Notifications.cancelScheduledNotificationAsync(ident(h)).catch(() => {}))
   );
-  if (!(await hydrationReminderEnabled(userId))) return;
+  if (!enabled || !(await hydrationReminderEnabled(userId))) return;
   if (!(await ensurePermission())) return;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(CHANNEL, {
@@ -46,8 +52,8 @@ export async function syncHydrationReminders(userId: number): Promise<void> {
     await Notifications.scheduleNotificationAsync({
       identifier: ident(h),
       content: {
-        title: '💧 Hora de beber água',
-        body: 'Beba um copo agora e registre no FitTracker.',
+        title: HYDRATION_TITLE,
+        body: HYDRATION_BODY,
         sound: 'default',
       },
       trigger: {

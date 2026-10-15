@@ -2,7 +2,13 @@ import { requireOptionalNativeModule } from 'expo-modules-core';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { ensurePermission } from './notifications';
-import { syncHydrationReminders } from './hydrationReminder';
+import {
+  HYDRATION_BODY,
+  HYDRATION_HOURS,
+  HYDRATION_TITLE,
+  hydrationReminderEnabled,
+  syncHydrationReminders,
+} from './hydrationReminder';
 import { listMedications, parseReminderDays, parseReminderTimes } from './repos/medications';
 
 /**
@@ -17,6 +23,8 @@ type NativeAlarm = {
   openExactAlarmSettings(): void;
   openFullScreenSettings(): void;
   test(seconds: number): void;
+  /** Só no módulo novo (v0.5.3+), que também entende alarmes kind "notify". */
+  watchMeasureNow?: unknown;
 };
 
 const Native =
@@ -73,7 +81,7 @@ export async function syncMedicationAlarms(userId: number): Promise<void> {
     }
   }
 
-  const alarms = [];
+  const alarms: Record<string, unknown>[] = [];
   for (const [time, items] of byTime) {
     const [hour, minute] = time.split(':').map(Number);
     const groups: { weekday: number | null; meds: Item['med'][] }[] = items.every((i) => i.days == null)
@@ -97,10 +105,26 @@ export async function syncMedicationAlarms(userId: number): Promise<void> {
       });
     }
   }
+  // Água pelo nativo (notificação comum + mensagem no relógio), se o módulo entende "notify".
+  const nativeWater = typeof Native.watchMeasureNow === 'function';
+  if (nativeWater && (await hydrationReminderEnabled(userId))) {
+    for (const h of HYDRATION_HOURS) {
+      alarms.push({
+        id: `water-${h}`,
+        hour: h,
+        minute: 0,
+        weekday: 0,
+        title: HYDRATION_TITLE,
+        body: HYDRATION_BODY,
+        medicationIds: [],
+        kind: 'notify',
+      });
+    }
+  }
   Native.replaceAll(JSON.stringify(alarms));
   // Migração: os lembretes antigos do expo-notifications tocariam em dobro.
-  // Só suplementos agendam notificação local; push remoto não é afetado.
+  // Só suplementos e água agendam notificação local; push remoto não é afetado.
   await Notifications.cancelAllScheduledNotificationsAsync();
-  // O cancelAll acima também levou os de água; recria.
-  await syncHydrationReminders(userId);
+  // Módulo antigo: a água continua pelo expo-notifications (o cancelAll acima a levou).
+  if (!nativeWater) await syncHydrationReminders(userId);
 }

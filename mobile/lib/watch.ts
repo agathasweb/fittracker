@@ -12,6 +12,8 @@ type NativeWatch = {
   watchConfigure(address: string | null, userId: number): void;
   watchSyncNow(): Promise<number>;
   watchLastSync(): number;
+  watchMeasureNow?(): Promise<{ systolic: number; diastolic: number } | null>;
+  watchTestMessage?(appId?: number | null, type?: number | null, body?: string | null): Promise<void>;
 };
 
 const Native =
@@ -66,4 +68,23 @@ export function lastWatchSync(): Date | null {
   if (!Native) return null;
   const ms = Native.watchLastSync();
   return ms > 0 ? new Date(ms) : null;
+}
+
+/** O APK tem os recursos novos do relógio (medir agora, mensagens)? Desde a v0.5.3. */
+export function watchExtrasAvailable(): boolean {
+  return Native != null && typeof Native.watchMeasureNow === 'function';
+}
+
+/** Pede ao relógio uma medição de pressão agora (~1 min) e grava. */
+export async function measureWatchNow(): Promise<{ systolic: number; diastolic: number } | null> {
+  if (!Native?.watchMeasureNow) return null;
+  if (!(await ensureBluetoothPermission())) throw new Error('Permissão de Bluetooth negada');
+  return Native.watchMeasureNow();
+}
+
+/** Manda uma mensagem de teste pro relógio (appId/type só pra diagnóstico). */
+export async function sendWatchTestMessage(appId?: number, type?: number, body?: string): Promise<void> {
+  if (!Native?.watchTestMessage) return;
+  if (!(await ensureBluetoothPermission())) throw new Error('Permissão de Bluetooth negada');
+  await Native.watchTestMessage(appId ?? null, type ?? null, body ?? null);
 }

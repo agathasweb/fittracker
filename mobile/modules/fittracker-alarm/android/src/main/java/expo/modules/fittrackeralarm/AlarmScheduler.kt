@@ -13,6 +13,7 @@ object AlarmScheduler {
   const val EXTRA_TITLE = "title"
   const val EXTRA_BODY = "body"
   const val EXTRA_MEDS = "medicationIds"
+  const val EXTRA_KIND = "kind"
   const val SNOOZE_MINUTES = 10
 
   private fun am(ctx: Context) = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -29,7 +30,7 @@ object AlarmScheduler {
 
   fun rescheduleAll(ctx: Context) {
     AlarmStore.load(ctx).forEach { a ->
-      schedule(ctx, a.id, nextTrigger(a.hour, a.minute, a.weekday), a.title, a.body, a.medicationIds)
+      schedule(ctx, a.id, nextTrigger(a.hour, a.minute, a.weekday), a.title, a.body, a.medicationIds, a.kind)
     }
   }
 
@@ -59,10 +60,11 @@ object AlarmScheduler {
   }
 
   private fun firePendingIntent(
-    ctx: Context, id: String, title: String, body: String, meds: IntArray,
+    ctx: Context, id: String, title: String, body: String, meds: IntArray, kind: String,
   ): PendingIntent {
     val intent = Intent(ctx, AlarmReceiver::class.java).apply {
       action = ACTION_FIRE
+      putExtra(EXTRA_KIND, kind)
       putExtra(EXTRA_ID, id)
       putExtra(EXTRA_TITLE, title)
       putExtra(EXTRA_BODY, body)
@@ -76,8 +78,15 @@ object AlarmScheduler {
 
   private fun schedule(
     ctx: Context, id: String, at: Long, title: String, body: String, meds: IntArray,
+    kind: String = Alarm.KIND_ALARM,
   ) {
-    val pi = firePendingIntent(ctx, id, title, body, meds)
+    val pi = firePendingIntent(ctx, id, title, body, meds, kind)
+    if (kind == Alarm.KIND_NOTIFY) {
+      // Lembrete comum: exato, mas sem o ícone de despertador na barra.
+      if (canScheduleExact(ctx)) am(ctx).setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+      else am(ctx).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+      return
+    }
     if (canScheduleExact(ctx)) {
       // setAlarmClock: exato, fura o Doze e mostra o ícone de despertador na barra.
       val launch = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)

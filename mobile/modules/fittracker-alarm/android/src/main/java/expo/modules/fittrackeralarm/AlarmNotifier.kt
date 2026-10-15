@@ -103,6 +103,38 @@ object AlarmNotifier {
     nm(ctx).notify(notificationId(id), n)
   }
 
+  private const val CHANNEL_SIMPLE = "reminder_simple"
+
+  /** Notificação comum (som padrão, sem tela cheia) — lembretes como o de água. */
+  fun showSimple(ctx: Context, id: String, title: String, body: String) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm(ctx).getNotificationChannel(CHANNEL_SIMPLE) == null) {
+      nm(ctx).createNotificationChannel(
+        NotificationChannel(CHANNEL_SIMPLE, "Lembretes", NotificationManager.IMPORTANCE_HIGH).apply {
+          description = "Lembretes do dia a dia, como beber água"
+        },
+      )
+    }
+    val launch = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+    val pi = launch?.let {
+      PendingIntent.getActivity(ctx, id.hashCode(), it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+    @Suppress("DEPRECATION")
+    val b = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      Notification.Builder(ctx, CHANNEL_SIMPLE)
+    } else {
+      Notification.Builder(ctx).setPriority(Notification.PRIORITY_HIGH)
+    }
+    b.setSmallIcon(ctx.applicationInfo.icon)
+      .setContentTitle(title)
+      .setContentText(body)
+      .setAutoCancel(true)
+    pi?.let { b.setContentIntent(it) }
+    nm(ctx).notify(notificationId(id), b.build())
+  }
+
+  fun isActive(ctx: Context, id: String): Boolean =
+    nm(ctx).activeNotifications.any { it.id == notificationId(id) }
+
   fun dismiss(ctx: Context, id: String) {
     nm(ctx).cancel(notificationId(id))
   }

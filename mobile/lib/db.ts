@@ -334,6 +334,22 @@ const MIGRATIONS: { version: number; sql: string }[] = [
        WHERE reminder_weekday IS NOT NULL;
     `,
   },
+  {
+    // Registro horário do relógio (gravado pelo módulo nativo): passos/kcal da hora,
+    // FC e SpO2. hour_at = "yyyy-MM-dd HH:00:00" local; a última leitura da hora vence.
+    version: 13,
+    sql: `
+      CREATE TABLE watch_hourly (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        hour_at TEXT NOT NULL,
+        steps INTEGER NOT NULL DEFAULT 0,
+        kcal INTEGER NOT NULL DEFAULT 0,
+        heart_rate INTEGER,
+        spo2 INTEGER,
+        PRIMARY KEY (user_id, hour_at)
+      );
+    `,
+  },
 ];
 
 async function applyMigrations(db: SQLite.SQLiteDatabase) {

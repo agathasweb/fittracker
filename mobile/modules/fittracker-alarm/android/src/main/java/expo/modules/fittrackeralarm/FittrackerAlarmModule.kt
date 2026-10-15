@@ -16,7 +16,7 @@ class FittrackerAlarmModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("FittrackerAlarm")
 
-    /** JSON: [{id, hour, minute, weekday, title, body, medicationIds}] — substitui todos os alarmes. */
+    /** JSON: [{id, hour, minute, weekday, title, body, medicationIds, kind?}] — substitui todos os alarmes. */
     Function("replaceAll") { json: String ->
       val arr = JSONArray(json)
       val alarms = (0 until arr.length()).map { Alarm.fromJson(arr.getJSONObject(it)) }
@@ -57,6 +57,20 @@ class FittrackerAlarmModule : Module() {
     }
 
     Function("watchLastSync") { BpStore.lastSync(ctx).toDouble() }
+
+    /** Mede a pressão agora (~1 min). Devolve {systolic, diastolic} ou null. */
+    AsyncFunction("watchMeasureNow") {
+      BpStore.measureAndSave(ctx)?.let { mapOf("systolic" to it.systolic, "diastolic" to it.diastolic) }
+    }
+
+    /** Manda uma mensagem de teste pro relógio. */
+    AsyncFunction("watchTestMessage") { appId: Int?, type: Int?, body: String? ->
+      val address = BpStore.address(ctx) ?: throw IllegalStateException("Relógio não configurado")
+      WatchSync.pushMessage(
+        ctx, address, "FitTracker", body ?: "Teste: as notificações do app chegam aqui.",
+        appId ?: WatchMessage.APP_ID, type ?: WatchMessage.TYPE,
+      )
+    }
 
     /** Dispara um alarme de teste em `seconds` segundos (botão "Testar alarme"). */
     Function("test") { seconds: Int ->

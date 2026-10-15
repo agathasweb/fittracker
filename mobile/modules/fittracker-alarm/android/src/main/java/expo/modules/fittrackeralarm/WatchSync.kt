@@ -15,12 +15,19 @@ import java.io.ByteArrayOutputStream
 import java.util.Calendar
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.ReentrantLock
 
 /** Uma leitura de pressão vinda do relógio (horário local). */
 data class BpReading(val measuredAt: String, val systolic: Int, val diastolic: Int, val heartRate: Int?)
+
+/** Registro horário do relógio: passos/kcal da hora, FC e SpO2 (horário local, "yyyy-MM-dd HH:00:00"). */
+data class WatchHour(val hourAt: String, val steps: Int, val kcal: Int, val heartRate: Int?, val spo2: Int?)
+
+data class SyncResult(val readings: List<BpReading>, val hours: List<WatchHour>)
 
 /**
  * Sincroniza o histórico do relógio (HW6 / app Wearfit Pro) via BLE — Nordic UART, quadros 0xAB.
@@ -101,25 +108,100 @@ object WatchSync {
     }
   }
 
+  /** Liga a medição automática de hora em hora (o relógio grava pressão/FC/SpO2 a cada hora). */
+  private fun hourlyMeasureOn() = byteArrayOf(0xAB.toByte(), 0x00, 0x04, 0xFF.toByte(), 0x78, 0x80.toByte(), 0x01)
+
+  /** Acerta a hora do relógio pela do celular. */
+  private fun timeSync(): ByteArray {
+    val c = Calendar.getInstance()
+    val y = c.get(Calendar.YEAR)
+    return byteArrayOf(
+      0xAB.toByte(), 0x00, 0x0B, 0xFF.toByte(), 0x93.toByte(), 0x80.toByte(), 0x00,
+      (y shr 8).toByte(), (y and 0xFF).toByte(), (c.get(Calendar.MONTH) + 1).toByte(),
+      c.get(Calendar.DAY_OF_MONTH).toByte(), c.get(Calendar.HOUR_OF_DAY).toByte(),
+      c.get(Calendar.MINUTE).toByte(), c.get(Calendar.SECOND).toByte(),
+    )
+  }
+
+  /** Medição de pressão pontual: 31 21 01 inicia, 31 21 00 para. */
+  private fun bpMeasure(start: Boolean) =
+    byteArrayOf(0xAB.toByte(), 0x00, 0x04, 0xFF.toByte(), 0x31, 0x21, if (start) 0x01 else 0x00)
+
+  /** Registro horário (51 20) com o que vier — passos, kcal, FC, SpO2 — mesmo sem pressão. */
+  fun parseHourly(f: IntArray): WatchHour? {
+    if (f.size < 20 || f[0] != 0xAB || f[3] != 0xFF || f[4] != 0x51 || f[5] != 0x20) return null
+    val steps = (f[10] shl 16) or (f[11] shl 8) or f[12]
+    val kcal = (f[13] shl 16) or (f[14] shl 8) or f[15]
+    return WatchHour(ts(f[6], f[7], f[8], f[9], 0), steps, kcal, f[16].takeIf { it > 0 }, f[17].takeIf { it > 0 })
+  }
+
   /**
-   * Conecta, pede o histórico desde `sinceMillis` e devolve as leituras de pressão.
-   * Bloqueante (rodar fora da main thread). Termina após 5 s sem dados ou 45 s no total.
+   * Uma conexão GATT com o relógio: notificações ligadas e escrita serializada (cada `send`
+   * espera a confirmação da anterior). Fecha só o NOSSO cliente; o link de outro app continua.
    */
+  class Session internal constructor(
+    private val gatt: BluetoothGatt,
+    private val wc: BluetoothGattCharacteristic,
+    private val writeDone: Semaphore,
+    private val lastData: AtomicLong,
+    private val closed: CountDownLatch,
+  ) {
+    @SuppressLint("MissingPermission")
+    fun send(cmd: ByteArray) {
+      writeDone.drainPermits()
+      if (Build.VERSION.SDK_INT >= 33) {
+        gatt.writeCharacteristic(wc, cmd, wc.writeType)
+      } else {
+        @Suppress("DEPRECATION")
+        wc.value = cmd
+        @Suppress("DEPRECATION")
+        gatt.writeCharacteristic(wc)
+      }
+      if (!writeDone.tryAcquire(3, TimeUnit.SECONDS)) Log.w(TAG, "escrita sem confirmação")
+    }
+
+    /** Espera até `idleMs` sem dados chegando (ou `maxMs` no total, ou o relógio cair). */
+    fun awaitIdle(idleMs: Long = IDLE_MS, maxMs: Long = MAX_MS) {
+      val start = System.currentTimeMillis()
+      lastData.set(start)
+      while (System.currentTimeMillis() - start < maxMs) {
+        if (closed.await(500, TimeUnit.MILLISECONDS)) return
+        if (System.currentTimeMillis() - lastData.get() > idleMs) return
+      }
+    }
+
+    fun isClosed() = closed.count == 0L
+  }
+
+  /** Conecta, liga as notificações, roda `block` e desconecta. Bloqueante (fora da main thread). */
   @SuppressLint("MissingPermission")
-  fun sync(ctx: Context, address: String, sinceMillis: Long): List<BpReading> {
+  fun <T> session(ctx: Context, address: String, onFrame: (IntArray) -> Unit, block: (Session) -> T): T {
+    // Uma conversa por vez (sync horária x mensagem x medição): escritas intercaladas embaralham quadros.
+    if (!lock.tryLock(100, TimeUnit.SECONDS)) throw IllegalStateException("Relógio ocupado")
+    try {
+      return openSession(ctx, address, onFrame, block)
+    } finally {
+      lock.unlock()
+    }
+  }
+
+  private val lock = ReentrantLock()
+
+  @SuppressLint("MissingPermission")
+  private fun <T> openSession(ctx: Context, address: String, onFrame: (IntArray) -> Unit, block: (Session) -> T): T {
     val bm = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     val adapter = bm.adapter ?: throw IllegalStateException("Bluetooth indisponível")
     if (!adapter.isEnabled) throw IllegalStateException("Bluetooth desligado")
     val device: BluetoothDevice = adapter.getRemoteDevice(address)
 
-    val readings = linkedMapOf<String, BpReading>()
     val ready = CountDownLatch(1)
-    val done = CountDownLatch(1)
+    val closed = CountDownLatch(1)
+    val writeDone = Semaphore(0)
     val lastData = AtomicLong(0L)
     val error = AtomicReference<String?>(null)
     val asm = Assembler { frame ->
       lastData.set(System.currentTimeMillis())
-      parse(frame)?.let { readings[it.measuredAt] = it }
+      try { onFrame(frame) } catch (e: Exception) { Log.w(TAG, "quadro: ${e.message}") }
     }
 
     val cb = object : BluetoothGattCallback() {
@@ -129,7 +211,7 @@ object WatchSync {
         } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
           if (ready.count > 0L) error.set("Relógio não conectou (status $status)")
           ready.countDown()
-          done.countDown()
+          closed.countDown()
         }
       }
 
@@ -160,6 +242,10 @@ object WatchSync {
         ready.countDown()
       }
 
+      override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
+        writeDone.release()
+      }
+
       @Deprecated("API < 33")
       override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
         @Suppress("DEPRECATION")
@@ -176,32 +262,71 @@ object WatchSync {
     try {
       if (!ready.await(20, TimeUnit.SECONDS)) throw IllegalStateException("Tempo esgotado conectando ao relógio")
       error.get()?.let { throw IllegalStateException(it) }
-
-      val since = Calendar.getInstance().apply { timeInMillis = sinceMillis }
-      val cmd = syncCommand(since)
       val wc = gatt.getService(SERVICE)?.getCharacteristic(WRITE)
         ?: throw IllegalStateException("Característica de escrita não encontrada")
-      if (Build.VERSION.SDK_INT >= 33) {
-        gatt.writeCharacteristic(wc, cmd, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-      } else {
-        @Suppress("DEPRECATION")
-        wc.value = cmd
-        @Suppress("DEPRECATION")
-        gatt.writeCharacteristic(wc)
-      }
-
-      val start = System.currentTimeMillis()
-      lastData.set(start)
-      while (System.currentTimeMillis() - start < MAX_MS) {
-        if (done.await(500, TimeUnit.MILLISECONDS)) break
-        if (System.currentTimeMillis() - lastData.get() > IDLE_MS) break
-      }
+      return block(Session(gatt, wc, writeDone, lastData, closed))
     } finally {
-      // Fecha só o NOSSO cliente GATT; o link do Wearfit Pro continua.
       try { gatt.disconnect() } catch (_: Exception) {}
       try { gatt.close() } catch (_: Exception) {}
     }
-    Log.i(TAG, "sync: ${readings.size} leituras de pressão")
-    return readings.values.toList()
+  }
+
+  /**
+   * Acerta a hora, garante a medição de hora em hora ligada e pede o histórico desde
+   * `sinceMillis`. Termina após 5 s sem dados ou 45 s no total.
+   */
+  fun sync(ctx: Context, address: String, sinceMillis: Long): SyncResult {
+    val readings = linkedMapOf<String, BpReading>()
+    val hours = linkedMapOf<String, WatchHour>()
+    session(ctx, address, { f ->
+      parse(f)?.let { readings[it.measuredAt] = it }
+      parseHourly(f)?.let { hours[it.hourAt] = it }
+    }) { s ->
+      s.send(timeSync())
+      s.send(hourlyMeasureOn())
+      s.send(syncCommand(Calendar.getInstance().apply { timeInMillis = sinceMillis }))
+      s.awaitIdle()
+    }
+    Log.i(TAG, "sync: ${readings.size} leituras de pressão, ${hours.size} horas")
+    return SyncResult(readings.values.toList(), hours.values.toList())
+  }
+
+  /**
+   * Mede a pressão agora (o relógio leva ~1 min). Devolve a leitura ou null se não veio
+   * (relógio fora do pulso, por exemplo).
+   */
+  fun measureNow(ctx: Context, address: String): BpReading? {
+    val result = AtomicReference<BpReading?>(null)
+    val got = CountDownLatch(1)
+    session(ctx, address, { f ->
+      // 31 21 SIS DIA — chega com zeros enquanto mede
+      if (f.size >= 8 && f[0] == 0xAB && f[4] == 0x31 && f[5] == 0x21 && f[6] > 0 && f[7] > 0) {
+        val now = Calendar.getInstance()
+        val at = String.format(
+          "%04d-%02d-%02d %02d:%02d:00", now.get(Calendar.YEAR), now.get(Calendar.MONTH) + 1,
+          now.get(Calendar.DAY_OF_MONTH), now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE),
+        )
+        result.set(BpReading(at, f[6], f[7], null))
+        got.countDown()
+      }
+    }) { s ->
+      s.send(bpMeasure(true))
+      val deadline = System.currentTimeMillis() + 90_000L
+      while (System.currentTimeMillis() < deadline && !s.isClosed()) {
+        if (got.await(500, TimeUnit.MILLISECONDS)) break
+      }
+      if (!s.isClosed()) s.send(bpMeasure(false))
+    }
+    return result.get()
+  }
+
+  /** Mostra uma mensagem no relógio (notificação do FitTracker). */
+  fun pushMessage(
+    ctx: Context, address: String, title: String, body: String,
+    appId: Int = WatchMessage.APP_ID, type: Int = WatchMessage.TYPE,
+  ) {
+    session(ctx, address, {}) { s ->
+      for (pkt in WatchMessage.packets(title, body, appId, type)) s.send(pkt)
+    }
   }
 }

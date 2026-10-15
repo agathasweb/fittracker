@@ -7,7 +7,8 @@ import org.json.JSONObject
 /**
  * Um alarme de remédios/suplementos, persistido pra sobreviver a reboot. Agrupa tudo que
  * vence no mesmo horário (um alarme só, "Tomei todos"). weekday: 0 = todo dia;
- * 1..7 = Calendar.SUNDAY..SATURDAY (semanal).
+ * 1..7 = Calendar.SUNDAY..SATURDAY (semanal). kind: "alarm" (despertador em tela cheia) ou
+ * "notify" (notificação comum, ex.: lembrete de água).
  */
 data class Alarm(
   val id: String,
@@ -17,6 +18,7 @@ data class Alarm(
   val title: String,
   val body: String,
   val medicationIds: IntArray,
+  val kind: String = KIND_ALARM,
 ) {
   fun toJson(): JSONObject = JSONObject()
     .put("id", id)
@@ -26,8 +28,12 @@ data class Alarm(
     .put("title", title)
     .put("body", body)
     .put("medicationIds", JSONArray(medicationIds.toList()))
+    .put("kind", kind)
 
   companion object {
+    const val KIND_ALARM = "alarm"
+    const val KIND_NOTIFY = "notify"
+
     fun fromJson(o: JSONObject): Alarm {
       val ids = o.optJSONArray("medicationIds")
       return Alarm(
@@ -38,6 +44,7 @@ data class Alarm(
         title = o.optString("title", "Hora dos remédios"),
         body = o.optString("body", ""),
         medicationIds = if (ids != null) IntArray(ids.length()) { ids.getInt(it) } else IntArray(0),
+        kind = o.optString("kind", KIND_ALARM),
       )
     }
   }

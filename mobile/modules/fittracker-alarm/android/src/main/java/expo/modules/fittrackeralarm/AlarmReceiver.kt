@@ -14,9 +14,24 @@ class AlarmReceiver : BroadcastReceiver() {
 
     when (intent.action) {
       AlarmScheduler.ACTION_FIRE -> {
-        AlarmNotifier.show(ctx, id, title, body, meds)
-        // setAlarmClock é de disparo único: agenda a ocorrência de amanhã.
+        if (intent.getStringExtra(AlarmScheduler.EXTRA_KIND) == Alarm.KIND_NOTIFY) {
+          AlarmNotifier.showSimple(ctx, id, title, body)
+        } else {
+          AlarmNotifier.show(ctx, id, title, body, meds)
+        }
+        // Disparo único: agenda a próxima ocorrência.
         if (!id.startsWith("snooze:")) AlarmScheduler.rescheduleAll(ctx)
+        WatchPush.send(ctx, goAsync(), title, body)
+        if (intent.getStringExtra(AlarmScheduler.EXTRA_KIND) != Alarm.KIND_NOTIFY) {
+          WatchPush.scheduleRepeat(ctx, id, title, body)
+        }
+      }
+      WatchPush.ACTION_REPEAT -> {
+        // Para sozinho quando o alarme some (Tomei, Adiar, dispensado ou os 10 min de timeout).
+        if (AlarmNotifier.isActive(ctx, id)) {
+          WatchPush.send(ctx, goAsync(), title, body)
+          WatchPush.scheduleRepeat(ctx, id, title, body)
+        }
       }
       AlarmNotifier.ACTION_TAKEN -> {
         AlarmNotifier.dismiss(ctx, id)
