@@ -93,6 +93,15 @@ jobs:
           curl -L -o fittracker.apk "$(cat apk-url.txt)"
           ls -lh fittracker.apk
 
+      - name: Verify native module in APK
+        working-directory: mobile
+        run: |
+          # O módulo local (modules/fittracker-alarm) já ficou de fora uma vez por um
+          # .gitignore guloso e o APK saiu sem alarme/relógio, em silêncio.
+          AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt | tail -1)
+          "$AAPT" dump permissions fittracker.apk | grep -q USE_FULL_SCREEN_INTENT \
+            || { echo "APK sem o módulo fittracker-alarm"; exit 1; }
+
       - name: Show EAS build logs (on failure)
         if: failure()
         working-directory: mobile

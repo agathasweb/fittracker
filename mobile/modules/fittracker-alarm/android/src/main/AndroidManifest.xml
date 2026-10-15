@@ -1,0 +1,42 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- USE_EXACT_ALARM é concedida automaticamente no Android 13+; abaixo disso vale a SCHEDULE. -->
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <uses-permission android:name="android.permission.VIBRATE" />
+  <!-- Leitura da pressão do relógio (BLE). Só conecta em endereço conhecido, sem scan. -->
+  <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+  <application>
+    <receiver
+      android:name="expo.modules.fittrackeralarm.AlarmReceiver"
+      android:exported="false" />
+
+    <!-- Alarmes do AlarmManager não sobrevivem a reboot/atualização: reagenda tudo. -->
+    <receiver
+      android:name="expo.modules.fittrackeralarm.BootReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        <action android:name="android.intent.action.TIME_SET" />
+        <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+        <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+      </intent-filter>
+    </receiver>
+
+    <!-- Tela própria (não a MainActivity) pra o resto do app nunca aparecer sem desbloquear. -->
+    <activity
+      android:name="expo.modules.fittrackeralarm.AlarmActivity"
+      android:exported="false"
+      android:excludeFromRecents="true"
+      android:launchMode="singleInstance"
+      android:taskAffinity=""
+      android:showWhenLocked="true"
+      android:turnScreenOn="true"
+      android:screenOrientation="portrait"
+      android:theme="@android:style/Theme.Material.NoActionBar" />
+  </application>
+</manifest>
