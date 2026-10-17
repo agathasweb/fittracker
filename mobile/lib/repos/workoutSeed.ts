@@ -16,11 +16,13 @@ import {
  * 1–2 s, excêntrica 3–4 s, 40–50 min de musculação + 10–20 min de aeróbico no fim.
  * Julia (13 anos) recebe a mesma divisão em versão leve e protetora do joelho.
  * A v2 substitui os modelos A/B/C da v1; o histórico de sessões fica (é snapshot).
+ * v3: sai o afundo, e stiff/elevação pélvica/prancha lateral/exercícios de solo viram
+ * máquina (glúteo, abdominal, rotação de tronco). Mesmos dias e grupos pros dois treinarem juntos.
  */
 
 type ModeloExemplo = { name: string; notes: string; exercises: NewTemplateExercise[] };
 
-const PLAN_VERSION = 2;
+const PLAN_VERSION = 3;
 const versionKey = (userId: number) => `@fittracker/workout_plan_version/${userId}`;
 
 const CADENCIA = 'Subida 1–2 s, descida 3–4 s. Solte o ar no esforço — não prenda a respiração.';
@@ -48,7 +50,6 @@ const PLANOS: Record<string, ModeloExemplo[]> = {
         { name: 'Leg press 45°', target_sets: 3, target_reps: '8–12', notes: 'Não tirar o quadril do banco na descida.' },
         { name: 'Agachamento no Smith', target_sets: 3, target_reps: '8–12', notes: 'Coluna neutra. Alternativa: hack com lombar apoiada.' },
         { name: 'Cadeira extensora', target_sets: 3, target_reps: '10–12', notes: 'Pausa de 1 s com a perna estendida.' },
-        { name: 'Afundo no Smith (passada)', target_sets: 2, target_reps: '10 cada perna', notes: 'Tronco ereto, joelho alinhado com o pé.' },
         { name: 'Cadeira adutora', target_sets: 3, target_reps: '12', notes: '' },
         { name: 'Panturrilha em pé (máquina)', target_sets: 4, target_reps: '10–15', notes: 'Amplitude total, pausa embaixo.' },
         { name: 'Prancha frontal', target_sets: 3, target_reps: '30–40 s', notes: 'Core. Respiração contínua.' },
@@ -72,11 +73,11 @@ const PLANOS: Record<string, ModeloExemplo[]> = {
       exercises: [
         { name: 'Mesa flexora', target_sets: 3, target_reps: '8–12', notes: 'Quadril colado no banco.' },
         { name: 'Cadeira flexora', target_sets: 3, target_reps: '10–12', notes: '' },
-        { name: 'Elevação pélvica (hip thrust)', target_sets: 3, target_reps: '8–12', notes: 'Glúteo, amigo da lombar. Máquina ou barra com apoio.' },
-        { name: 'Stiff com halteres (leve)', target_sets: 3, target_reps: '10–12', notes: 'Coluna neutra. Se a lombar reclamar, troque por glúteo no cabo.' },
+        { name: 'Glúteo na máquina (coice)', target_sets: 3, target_reps: '10–12 cada perna', notes: 'Tronco apoiado, sem arquear a lombar.' },
         { name: 'Cadeira abdutora', target_sets: 3, target_reps: '12–15', notes: '' },
         { name: 'Panturrilha sentado (máquina)', target_sets: 4, target_reps: '12–15', notes: '' },
-        { name: 'Prancha lateral', target_sets: 3, target_reps: '20–30 s cada lado', notes: 'Core. Respiração contínua.' },
+        { name: 'Abdominal na máquina (crunch)', target_sets: 3, target_reps: '12–15', notes: 'Enrolar o tronco, sem puxar com os braços.' },
+        { name: 'Rotação de tronco na máquina', target_sets: 2, target_reps: '12 cada lado', notes: 'Oblíquos. Carga leve, giro controlado.' },
       ],
     },
   ],
@@ -100,10 +101,10 @@ const PLANOS: Record<string, ModeloExemplo[]> = {
       notes: 'Parar na hora se doer o joelho. ~30 min + 10–15 min de bike. Glúteo forte protege o joelho.',
       exercises: [
         { name: 'Leg press (leve)', target_sets: 2, target_reps: '12–15', notes: 'Amplitude confortável, sem travar o joelho no fim.' },
-        { name: 'Ponte de glúteo (solo)', target_sets: 2, target_reps: '12–15', notes: '' },
+        { name: 'Glúteo na máquina (coice, leve)', target_sets: 2, target_reps: '12 cada perna', notes: 'Tronco apoiado.' },
         { name: 'Cadeira abdutora (leve)', target_sets: 2, target_reps: '12–15', notes: 'Glúteo médio — estabiliza o joelho.' },
         { name: 'Cadeira adutora (leve)', target_sets: 2, target_reps: '12–15', notes: '' },
-        { name: 'Step-up em degrau baixo', target_sets: 2, target_reps: '8 cada perna', notes: 'Joelho apontando para o pé.' },
+        { name: 'Cadeira extensora (leve)', target_sets: 2, target_reps: '12–15', notes: 'Amplitude confortável. Parar se doer o joelho.' },
         { name: 'Panturrilha no aparelho (leve)', target_sets: 2, target_reps: '15', notes: '' },
       ],
     },
@@ -115,7 +116,7 @@ const PLANOS: Record<string, ModeloExemplo[]> = {
         { name: 'Remada máquina (leve)', target_sets: 2, target_reps: '12–15', notes: 'Costas retas.' },
         { name: 'Crucifixo inverso (leve)', target_sets: 2, target_reps: '12–15', notes: 'Postura.' },
         { name: 'Rosca na polia (leve)', target_sets: 2, target_reps: '12–15', notes: '' },
-        { name: 'Prancha lateral', target_sets: 2, target_reps: '10–15 s cada lado', notes: '' },
+        { name: 'Abdominal na máquina (leve)', target_sets: 2, target_reps: '12–15', notes: 'Movimento curto e controlado.' },
       ],
     },
     {
@@ -123,10 +124,11 @@ const PLANOS: Record<string, ModeloExemplo[]> = {
       notes: 'Parar na hora se doer o joelho. ~30 min + 10–15 min de bike.',
       exercises: [
         { name: 'Mesa flexora (leve)', target_sets: 2, target_reps: '12–15', notes: '' },
-        { name: 'Elevação pélvica / máquina de glúteo (leve)', target_sets: 2, target_reps: '12–15', notes: '' },
+        { name: 'Cadeira flexora (leve)', target_sets: 2, target_reps: '12–15', notes: '' },
         { name: 'Glúteo no cabo (coice, leve)', target_sets: 2, target_reps: '12 cada perna', notes: '' },
         { name: 'Concha (clamshell) com faixa', target_sets: 2, target_reps: '12 cada lado', notes: 'Estabilidade do joelho.' },
         { name: 'Cadeira abdutora (leve)', target_sets: 2, target_reps: '12–15', notes: '' },
+        { name: 'Rotação de tronco na máquina (leve)', target_sets: 2, target_reps: '10 cada lado', notes: 'Oblíquos, giro lento.' },
       ],
     },
   ],
@@ -155,9 +157,9 @@ async function getVersion(userId: number): Promise<number> {
 }
 
 /**
- * Semeia o plano do dono da conta, uma vez. Conta nova: cria a v2. Conta que tinha a
- * v1: troca os modelos A/B/C antigos pelos A–D novos (modelos criados pelo próprio
- * usuário ficam). Devolve true se mexeu em algo.
+ * Semeia o plano do dono da conta, uma vez por versão. Os modelos semeados antes (v1 e
+ * os A–D com os mesmos nomes) são recriados com a versão atual; modelos criados pelo
+ * próprio usuário ficam. Devolve true se mexeu em algo.
  */
 let emAndamento: Promise<boolean> | null = null;
 
@@ -178,15 +180,12 @@ async function semear(userId: number, email: string): Promise<boolean> {
   if ((await getVersion(userId)) >= PLAN_VERSION) return false;
 
   if ((await countTemplates(userId)) > 0) {
-    const antigos = new Set(PLANOS_V1[key] ?? []);
+    const antigos = new Set([...(PLANOS_V1[key] ?? []), ...plano.map((t) => t.name)]);
     for (const t of await listTemplates(userId)) {
       if (antigos.has(t.name)) await deleteTemplate(t.id);
     }
   }
-  const existentes = new Set((await listTemplates(userId)).map((t) => t.name));
-  for (const t of plano) {
-    if (!existentes.has(t.name)) await createTemplate(userId, t.name, t.exercises, t.notes);
-  }
+  for (const t of plano) await createTemplate(userId, t.name, t.exercises, t.notes);
   await AsyncStorage.setItem(versionKey(userId), String(PLAN_VERSION));
   return true;
 }
