@@ -80,6 +80,7 @@ export default function ProfileScreen() {
         `${r.medsCriados} remédio(s)/suplemento(s) com alarme`,
         `${r.examesCriados} exame(s)/documento(s), ${r.anexos} anexo(s)`,
       ];
+      if (r.medsDesativados) linhas.push(`${r.medsDesativados} item(ns) da rotina anterior desativado(s)`);
       if (r.medsPulados.length) linhas.push(`Já existiam (mantidos): ${r.medsPulados.join(', ')}`);
       if (r.examesPulados) linhas.push(`${r.examesPulados} exame(s) já importado(s) antes`);
       Alert.alert('Importação concluída', linhas.join('\n'));

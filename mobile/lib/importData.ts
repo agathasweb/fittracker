@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import { syncMedicationAlarms } from './alarms';
 import { getDb } from './db';
 import { addResult, attachBase64, createExam, findExam, ResultInput } from './repos/exams';
-import { createMedication, listMedications, recordIntake } from './repos/medications';
+import { createMedication, listMedications, recordIntake, setActive } from './repos/medications';
 import { ExamCategory } from './types';
 
 /**
@@ -37,10 +37,17 @@ type ImportExam = {
   files?: { name: string; mime: string; base64: string }[];
 };
 
-type Pacote = { fittracker_import: 1; medications?: ImportMedication[]; exams?: ImportExam[] };
+type Pacote = {
+  fittracker_import: 1;
+  /** true = a lista de remédios do pacote SUBSTITUI a atual (os antigos são desativados, o histórico de tomadas fica). */
+  replace_medications?: boolean;
+  medications?: ImportMedication[];
+  exams?: ImportExam[];
+};
 
 export type ResultadoImport = {
   medsCriados: number;
+  medsDesativados: number;
   medsPulados: string[];
   examesCriados: number;
   examesPulados: number;
@@ -75,7 +82,14 @@ export async function escolherEImportar(userId: number): Promise<ResultadoImport
 }
 
 async function importar(userId: number, p: Pacote): Promise<ResultadoImport> {
-  const out: ResultadoImport = { medsCriados: 0, medsPulados: [], examesCriados: 0, examesPulados: 0, anexos: 0 };
+  const out: ResultadoImport = { medsCriados: 0, medsDesativados: 0, medsPulados: [], examesCriados: 0, examesPulados: 0, anexos: 0 };
+
+  if (p.replace_medications && p.medications?.length) {
+    for (const m of await listMedications(userId)) {
+      await setActive(m.id, false);
+      out.medsDesativados++;
+    }
+  }
 
   const existentes = new Set((await listMedications(userId)).map((m) => norm(m.name)));
   for (const m of p.medications ?? []) {
@@ -119,6 +133,6 @@ async function importar(userId: number, p: Pacote): Promise<ResultadoImport> {
 
   // Garante o WAL no arquivo antes de um eventual backup e reagenda os alarmes.
   await (await getDb()).execAsync('PRAGMA wal_checkpoint(PASSIVE);').catch(() => {});
-  if (out.medsCriados > 0) await syncMedicationAlarms(userId);
+  if (out.medsCriados > 0 || out.medsDesativados > 0) await syncMedicationAlarms(userId);
   return out;
 }

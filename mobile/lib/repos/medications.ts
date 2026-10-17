@@ -76,7 +76,7 @@ export async function listMedications(userId: number): Promise<MedicationWithTod
        LEFT JOIN medication_intakes i ON i.medication_id = m.id
       WHERE m.user_id = ? AND m.active = 1
       GROUP BY m.id
-      ORDER BY m.name ASC`,
+      ORDER BY m.reminder_times IS NULL, m.reminder_times, m.name`,
     day,
     userId
   );
