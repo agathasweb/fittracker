@@ -172,6 +172,7 @@ export default function MedicationsScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.medName}>{m.name}</Text>
                     {m.dosage && <Text style={styles.medDosage}>{m.dosage}</Text>}
+                    {m.notes && <Text style={styles.medNotes}>{m.notes}</Text>}
                   </View>
                   <Pressable
                     onPress={() => {
@@ -580,6 +581,7 @@ const styles = StyleSheet.create({
   dot: { width: 12, height: 12, borderRadius: 6 },
   medName: { color: colors.text, fontSize: 16, fontWeight: '700' },
   medDosage: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
+  medNotes: { color: colors.primary, fontSize: 13, marginTop: 4 },
   iconBtn: { padding: spacing.xs },
   statsRow: {
     flexDirection: 'row',

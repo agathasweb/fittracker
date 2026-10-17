@@ -100,7 +100,13 @@ export async function syncMedicationAlarms(userId: number): Promise<void> {
         // Nativo usa Calendar (1=domingo..7=sábado); 0 = todo dia.
         weekday: g.weekday == null ? 0 : g.weekday + 1,
         title: g.meds.length > 1 ? `${time} · Hora dos lembretes` : `${time} · ${g.meds[0].name}`,
-        body: g.meds.map((m) => (m.dosage ? `${m.name} — ${m.dosage}` : m.name)).join('\n'),
+        body: g.meds
+          .map((m) => {
+            const linha = m.dosage ? `${m.name} — ${m.dosage}` : m.name;
+            // Observação de como tomar (ex.: "com refeição que tenha gordura") vai junto no alarme.
+            return m.notes ? `${linha}\n↳ ${m.notes}` : linha;
+          })
+          .join('\n'),
         medicationIds: g.meds.map((m) => m.id),
       });
     }
