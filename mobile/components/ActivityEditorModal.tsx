@@ -14,6 +14,7 @@ import {
 import * as deepseek from '../lib/ai/deepseek';
 import { createActivity } from '../lib/repos/activities';
 import { colors, radius, spacing } from '../lib/theme';
+import { useSheetBottomPadding } from '../lib/safeArea';
 import { User } from '../lib/types';
 import { Button } from './Button';
 import { Input } from './Input';
@@ -35,6 +36,7 @@ const PRESETS: { name: string; icon: keyof typeof Ionicons.glyphMap; hasDistance
 ];
 
 export function ActivityEditorModal({ visible, user, onClose, onSaved }: Props) {
+  const sheetBottom = useSheetBottomPadding();
   const [name, setName] = useState('');
   const [presetIdx, setPresetIdx] = useState<number | null>(null);
   const [duration, setDuration] = useState('');
@@ -135,7 +137,7 @@ export function ActivityEditorModal({ visible, user, onClose, onSaved }: Props) 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.backdrop}
       >
-        <View style={styles.modal}>
+        <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
           <Text style={styles.title}>Nova atividade</Text>
           <ScrollView style={{ maxHeight: 520 }}>
             <Text style={styles.fieldLabel}>Tipo</Text>

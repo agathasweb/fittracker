@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../lib/theme';
 
 export default function RootLayout() {
@@ -9,31 +9,40 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: colors.bg },
-            headerTintColor: colors.text,
-            contentStyle: { backgroundColor: colors.bg },
-          }}
-        >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="auth" options={{ headerShown: false }} />
-          <Stack.Screen name="hydration" options={{ title: 'Hidratação' }} />
-          <Stack.Screen name="protein" options={{ title: 'Proteína' }} />
-          <Stack.Screen name="blood-pressure" options={{ title: 'Pressão arterial' }} />
-          <Stack.Screen name="exams" options={{ title: 'Exames e documentos' }} />
-          <Stack.Screen name="exam/[id]" options={{ title: 'Exame' }} />
-          <Stack.Screen name="exam-markers" options={{ title: 'Evolução dos exames' }} />
-          <Stack.Screen name="change-password" options={{ title: 'Trocar senha' }} />
-          <Stack.Screen name="workout-session/[id]" options={{ title: 'Treino' }} />
-          <Stack.Screen name="workout-template/[id]" options={{ title: 'Treino' }} />
-          <Stack.Screen name="workout-history" options={{ title: 'Histórico' }} />
-          <Stack.Screen name="workout-progress" options={{ title: 'Evolução' }} />
-          <Stack.Screen name="meal-template/[id]" options={{ title: 'Refeição padrão' }} />
-          <Stack.Screen name="ad-hoc-meal" options={{ title: 'Refeição avulsa' }} />
-        </Stack>
+        <RootStack />
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+function RootStack() {
+  // Telas com header nativo: o header já recua o topo; o rodapé precisa sair de baixo
+  // da barra de navegação do Android / home indicator do iPhone.
+  const { bottom } = useSafeAreaInsets();
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.bg },
+        headerTintColor: colors.text,
+        contentStyle: { backgroundColor: colors.bg, paddingBottom: bottom },
+      }}
+    >
+      <Stack.Screen name="index" options={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />
+      <Stack.Screen name="auth" options={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />
+      <Stack.Screen name="hydration" options={{ title: 'Hidratação' }} />
+      <Stack.Screen name="protein" options={{ title: 'Proteína' }} />
+      <Stack.Screen name="blood-pressure" options={{ title: 'Pressão arterial' }} />
+      <Stack.Screen name="exams" options={{ title: 'Exames e documentos' }} />
+      <Stack.Screen name="exam/[id]" options={{ title: 'Exame' }} />
+      <Stack.Screen name="exam-markers" options={{ title: 'Evolução dos exames' }} />
+      <Stack.Screen name="change-password" options={{ title: 'Trocar senha' }} />
+      <Stack.Screen name="workout-session/[id]" options={{ title: 'Treino' }} />
+      <Stack.Screen name="workout-template/[id]" options={{ title: 'Treino' }} />
+      <Stack.Screen name="workout-history" options={{ title: 'Histórico' }} />
+      <Stack.Screen name="workout-progress" options={{ title: 'Evolução' }} />
+      <Stack.Screen name="meal-template/[id]" options={{ title: 'Refeição padrão' }} />
+      <Stack.Screen name="ad-hoc-meal" options={{ title: 'Refeição avulsa' }} />
+    </Stack>
   );
 }

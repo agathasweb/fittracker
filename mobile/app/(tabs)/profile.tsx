@@ -31,6 +31,7 @@ import { usePushToken } from '../../lib/push';
 import * as deepseek from '../../lib/ai/deepseek';
 import { updateUser } from '../../lib/repos/users';
 import { colors, radius, spacing } from '../../lib/theme';
+import { useSheetBottomPadding } from '../../lib/safeArea';
 import { ACTIVITY_LABEL, SEX_LABEL } from '../../lib/types';
 
 const AVATAR_DIR = (FileSystem.documentDirectory ?? '') + 'avatars/';
@@ -231,6 +232,7 @@ export default function ProfileScreen() {
 }
 
 function DeepSeekCard() {
+  const sheetBottom = useSheetBottomPadding();
   const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState('');
@@ -307,7 +309,7 @@ function DeepSeekCard() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalBackdrop}
         >
-          <View style={styles.modal}>
+          <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
             <Text style={styles.modalTitle}>Chave DeepSeek</Text>
             <Text style={styles.modalSub}>
               Pegue em platform.deepseek.com → API Keys. Começa com "sk-".

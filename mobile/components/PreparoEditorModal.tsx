@@ -13,6 +13,7 @@ import {
 import * as deepseek from '../lib/ai/deepseek';
 import { createFood, updateFood } from '../lib/repos/foods';
 import { colors, radius, spacing } from '../lib/theme';
+import { useSheetBottomPadding } from '../lib/safeArea';
 import { Food, FoodUnit } from '../lib/types';
 import { Button } from './Button';
 import { Input } from './Input';
@@ -42,6 +43,7 @@ export function PreparoEditorModal({
   onClose,
   onSaved,
 }: Props) {
+  const sheetBottom = useSheetBottomPadding();
   const [name, setName] = useState('');
   const [unit, setUnit] = useState<FoodUnit>('g');
   const [description, setDescription] = useState('');
@@ -153,7 +155,7 @@ export function PreparoEditorModal({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.backdrop}
       >
-        <View style={styles.modal}>
+        <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.sub}>Valores por {unitLabel}</Text>
           <ScrollView style={{ maxHeight: 500 }}>

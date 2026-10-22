@@ -40,6 +40,7 @@ import {
   updateMedication,
 } from '../../lib/repos/medications';
 import { colors, radius, spacing } from '../../lib/theme';
+import { useSheetBottomPadding } from '../../lib/safeArea';
 import { Medication, MedicationIntake } from '../../lib/types';
 import { todayISO } from '../../lib/format';
 
@@ -290,6 +291,7 @@ function toggleDay(days: number[] | null, d: number | null): number[] | null {
 }
 
 function MedicationEditor({ visible, userId, editing, onClose, onSaved }: EditorProps) {
+  const sheetBottom = useSheetBottomPadding();
   const [name, setName] = useState(editing?.name ?? '');
   const [dosage, setDosage] = useState(editing?.dosage ?? '');
   const [notes, setNotes] = useState(editing?.notes ?? '');
@@ -388,7 +390,7 @@ function MedicationEditor({ visible, userId, editing, onClose, onSaved }: Editor
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.modalBackdrop}
       >
-        <View style={styles.modal}>
+        <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
           <Text style={styles.modalTitle}>
             {editing ? 'Editar suplemento' : 'Novo suplemento'}
           </Text>
@@ -498,6 +500,7 @@ type HistoryProps = {
 };
 
 function IntakesHistoryModal({ med, onClose, onChanged }: HistoryProps) {
+  const sheetBottom = useSheetBottomPadding();
   const [intakes, setIntakes] = useState<MedicationIntake[]>([]);
 
   const load = useCallback(async () => {
@@ -524,7 +527,7 @@ function IntakesHistoryModal({ med, onClose, onChanged }: HistoryProps) {
   return (
     <Modal visible={!!med} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
-        <View style={styles.modal}>
+        <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
           <Text style={styles.modalTitle}>Tomadas de hoje</Text>
           <Text style={styles.modalSub}>{med.name}</Text>
           <ScrollView style={{ maxHeight: 360 }}>

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { searchFoods } from '../lib/repos/foods';
 import { colors, radius, spacing } from '../lib/theme';
+import { useSheetBottomPadding } from '../lib/safeArea';
 import { Food } from '../lib/types';
 import { Button } from './Button';
 import { Input } from './Input';
@@ -24,6 +25,7 @@ type Props = {
 };
 
 export function PreparoPickerModal({ visible, onClose, onPick }: Props) {
+  const sheetBottom = useSheetBottomPadding();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Food[]>([]);
   const [selected, setSelected] = useState<Food | null>(null);
@@ -67,7 +69,7 @@ export function PreparoPickerModal({ visible, onClose, onPick }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.backdrop}
       >
-        <View style={styles.modal}>
+        <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
           <Text style={styles.title}>Adicionar preparo ou líquido</Text>
 
           {!selected ? (

@@ -28,11 +28,13 @@ import {
   TemplateSummary,
 } from '../../lib/repos/mealTemplates';
 import { colors, radius, spacing } from '../../lib/theme';
+import { useSheetBottomPadding } from '../../lib/safeArea';
 import { Food, MEAL_TYPE_LABEL } from '../../lib/types';
 
 type View_ = 'today' | 'templates' | 'preparos';
 
 export default function MealsScreen() {
+  const sheetBottom = useSheetBottomPadding();
   const auth = useAuth();
   const router = useRouter();
   const userId = auth.status === 'authed' ? auth.user.id : null;
@@ -334,7 +336,7 @@ export default function MealsScreen() {
         onRequestClose={() => setNewMealMenuOpen(false)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modal}>
+          <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
             <Text style={styles.modalTitle}>Lançar refeição</Text>
             <Text style={styles.modalSub}>Como você quer registrar?</Text>
 
@@ -401,7 +403,7 @@ export default function MealsScreen() {
         onRequestClose={() => setPickTplOpen(false)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modal}>
+          <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
             <Text style={styles.modalTitle}>Escolher padrão</Text>
             <Text style={styles.modalSub}>Toque numa das suas refeições padrão:</Text>
             <ScrollView style={{ maxHeight: 360 }}>

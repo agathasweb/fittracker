@@ -2,7 +2,7 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UpdateBanner } from '../../components/UpdateBanner';
 import { colors } from '../../lib/theme';
 import { useRequireAuth } from '../../lib/guards';
@@ -11,6 +11,8 @@ import { syncMedicationAlarms } from '../../lib/alarms';
 
 export default function TabsLayout() {
   const auth = useRequireAuth();
+  // Barra de gestos/botões do Android e home indicator do iPhone ficam abaixo das abas.
+  const { bottom } = useSafeAreaInsets();
 
   // Registra o device pra push remoto e reporta a instalação ao painel assim
   // que o usuário está autenticado. Idempotente e silencioso em falha.
@@ -43,12 +45,14 @@ export default function TabsLayout() {
           tabBarStyle: {
             backgroundColor: colors.surface,
             borderTopColor: colors.border,
-            height: 64,
-            paddingBottom: 10,
+            height: 64 + bottom,
+            paddingBottom: 10 + bottom,
             paddingTop: 6,
           },
           headerStyle: { backgroundColor: colors.bg },
           headerTintColor: colors.text,
+          // O SafeAreaView acima já recua o topo; sem isto o header somava a barra de status de novo.
+          headerStatusBarHeight: 0,
         }}
       >
         <Tabs.Screen
