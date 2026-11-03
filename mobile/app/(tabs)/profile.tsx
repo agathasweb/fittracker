@@ -216,6 +216,11 @@ export default function ProfileScreen() {
           text="Exames e documentos"
           onPress={() => router.push('/exams')}
         />
+        <MenuRow
+          icon="heart-outline"
+          text="Pressão arterial"
+          onPress={() => router.push('/blood-pressure')}
+        />
         <MenuRow icon="download-outline" text="Importar arquivo de dados" onPress={onImport} />
       </Card>
 
