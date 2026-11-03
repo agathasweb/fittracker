@@ -222,11 +222,10 @@ export default function HojeScreen() {
                     {bp.measured_at.slice(0, 10) === todayISO()
                       ? `hoje às ${formatTime(bp.measured_at)}`
                       : `em ${bp.measured_at.slice(8, 10)}/${bp.measured_at.slice(5, 7)} às ${formatTime(bp.measured_at)}`}
-                    {bp.source === 'watch' ? ' · relógio' : ''}
                   </Text>
                 </>
               ) : (
-                <Text style={styles.hydrationGoal}>Toque pra conectar o relógio ou lançar uma medição</Text>
+                <Text style={styles.hydrationGoal}>Toque pra lançar uma medição</Text>
               )}
             </View>
             <Ionicons name="heart" size={42} color={colors.danger} />

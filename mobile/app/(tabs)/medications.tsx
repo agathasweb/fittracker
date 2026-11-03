@@ -32,6 +32,7 @@ import {
   deleteMedication,
   listIntakesOfDay,
   listMedications,
+  listUserIntakesOfDay,
   MedicationWithToday,
   parseNotificationIds,
   parseReminderDays,
@@ -43,6 +44,8 @@ import { colors, radius, spacing } from '../../lib/theme';
 import { useSheetBottomPadding } from '../../lib/safeArea';
 import { Medication, MedicationIntake } from '../../lib/types';
 import { todayISO } from '../../lib/format';
+import { addDays, format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const COLORS = ['#A3E635', '#60A5FA', '#F472B6', '#FBBF24', '#34D399', '#A78BFA'];
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -63,11 +66,13 @@ export default function MedicationsScreen() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Medication | null>(null);
   const [historyMed, setHistoryMed] = useState<MedicationWithToday | null>(null);
+  const [todayIntakes, setTodayIntakes] = useState<MedicationIntake[]>([]);
   const [perms, setPerms] = useState<AlarmPermissions | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
     setMeds(await listMedications(userId));
+    setTodayIntakes(await listUserIntakesOfDay(userId, todayISO()));
     // Rechecado a cada foco: o usuário volta das Configurações depois de liberar.
     setPerms(alarmPermissions());
   }, [userId]);
@@ -83,6 +88,20 @@ export default function MedicationsScreen() {
   async function takeNow(m: MedicationWithToday) {
     await recordIntake(m.id);
     await load();
+  }
+
+  function confirmRemoveIntake(m: MedicationWithToday, i: MedicationIntake) {
+    Alert.alert('Remover tomada', `Apagar a tomada de ${m.name} às ${formatTime(i.taken_at)}?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Apagar',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteIntake(i.id);
+          await load();
+        },
+      },
+    ]);
   }
 
   function confirmRemove(m: MedicationWithToday) {
@@ -234,9 +253,30 @@ export default function MedicationsScreen() {
                     style={styles.historyBtn}
                   >
                     <Ionicons name="time-outline" size={18} color={colors.text} />
-                    <Text style={styles.historyBtnText}>Hoje</Text>
+                    <Text style={styles.historyBtnText}>Histórico</Text>
                   </Pressable>
                 </View>
+
+                {todayIntakes.some((i) => i.medication_id === m.id) && (
+                  <View style={styles.intakeChips}>
+                    <Text style={styles.intakeChipsLabel}>Tomadas hoje (toque no ✕ se lançou errado):</Text>
+                    <View style={styles.intakeChipsRow}>
+                      {todayIntakes
+                        .filter((i) => i.medication_id === m.id)
+                        .map((i) => (
+                          <Pressable
+                            key={i.id}
+                            onPress={() => confirmRemoveIntake(m, i)}
+                            style={styles.intakeChip}
+                            hitSlop={4}
+                          >
+                            <Text style={styles.intakeChipText}>{formatTime(i.taken_at)}</Text>
+                            <Ionicons name="close" size={14} color={colors.danger} />
+                          </Pressable>
+                        ))}
+                    </View>
+                  </View>
+                )}
               </Card>
             );
           })
@@ -502,42 +542,73 @@ type HistoryProps = {
 function IntakesHistoryModal({ med, onClose, onChanged }: HistoryProps) {
   const sheetBottom = useSheetBottomPadding();
   const [intakes, setIntakes] = useState<MedicationIntake[]>([]);
+  const [day, setDay] = useState(todayISO());
 
-  const load = useCallback(async () => {
-    if (!med) return;
-    setIntakes(await listIntakesOfDay(med.id, todayISO()));
-  }, [med]);
+  const load = useCallback(async (m: MedicationWithToday | null, d: string) => {
+    if (!m) return;
+    setIntakes(await listIntakesOfDay(m.id, d));
+  }, []);
 
-  // load on open
+  // Ao abrir (ou trocar de suplemento) volta pra hoje.
   const currentMedId = med?.id ?? null;
   const [lastMedId, setLastMedId] = useState<number | null>(null);
   if (currentMedId !== lastMedId) {
     setLastMedId(currentMedId);
-    if (med) load();
+    const hoje = todayISO();
+    setDay(hoje);
+    if (med) load(med, hoje);
   }
 
-  async function remove(id: number) {
-    await deleteIntake(id);
-    await load();
-    await onChanged();
+  function goDay(delta: number) {
+    const d = format(addDays(parseISO(day), delta), 'yyyy-MM-dd');
+    if (d > todayISO()) return;
+    setDay(d);
+    load(med, d);
+  }
+
+  function remove(i: MedicationIntake) {
+    Alert.alert('Remover tomada', `Apagar a tomada das ${formatTime(i.taken_at)}?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Apagar',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteIntake(i.id);
+          await load(med, day);
+          await onChanged();
+        },
+      },
+    ]);
   }
 
   if (!med) return null;
+  const isToday = day === todayISO();
 
   return (
     <Modal visible={!!med} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
         <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
-          <Text style={styles.modalTitle}>Tomadas de hoje</Text>
+          <Text style={styles.modalTitle}>Tomadas</Text>
           <Text style={styles.modalSub}>{med.name}</Text>
+          <View style={styles.dayNav}>
+            <Pressable onPress={() => goDay(-1)} hitSlop={10}>
+              <Ionicons name="chevron-back" size={22} color={colors.primary} />
+            </Pressable>
+            <Text style={styles.dayNavText}>
+              {isToday ? 'Hoje' : format(parseISO(day), "EEE, dd/MM", { locale: ptBR })}
+            </Text>
+            <Pressable onPress={() => goDay(1)} disabled={isToday} hitSlop={10}>
+              <Ionicons name="chevron-forward" size={22} color={isToday ? colors.border : colors.primary} />
+            </Pressable>
+          </View>
           <ScrollView style={{ maxHeight: 360 }}>
             {intakes.length === 0 ? (
-              <Text style={styles.emptySub}>Nenhuma tomada registrada hoje.</Text>
+              <Text style={styles.emptySub}>Nenhuma tomada registrada neste dia.</Text>
             ) : (
               intakes.map((i) => (
                 <View key={i.id} style={styles.intakeRow}>
                   <Text style={styles.intakeTime}>{formatTime(i.taken_at)}</Text>
-                  <Pressable onPress={() => remove(i.id)} hitSlop={8}>
+                  <Pressable onPress={() => remove(i)} hitSlop={8}>
                     <Ionicons name="trash-outline" size={18} color={colors.danger} />
                   </Pressable>
                 </View>
@@ -623,6 +694,27 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   historyBtnText: { color: colors.text, fontWeight: '600', fontSize: 13 },
+  intakeChips: { marginTop: spacing.sm },
+  dayNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  dayNavText: { color: colors.text, fontWeight: '700', textTransform: 'capitalize' },
+  intakeChipsLabel: { color: colors.textMuted, fontSize: 12, marginBottom: 4 },
+  intakeChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  intakeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  intakeChipText: { color: colors.text, fontSize: 13, fontWeight: '600' },
   fab: {
     position: 'absolute',
     right: spacing.md,

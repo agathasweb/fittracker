@@ -167,6 +167,22 @@ export async function listIntakesOfDay(
   );
 }
 
+/** Todas as tomadas do usuário num dia (pra mostrar e desfazer direto no card). */
+export async function listUserIntakesOfDay(
+  userId: number,
+  dayISO: string
+): Promise<MedicationIntake[]> {
+  const db = await getDb();
+  return db.getAllAsync<MedicationIntake>(
+    `SELECT i.* FROM medication_intakes i
+       JOIN medications m ON m.id = i.medication_id
+      WHERE m.user_id = ? AND date(i.taken_at) = date(?)
+      ORDER BY i.taken_at`,
+    userId,
+    dayISO
+  );
+}
+
 export async function deleteIntake(id: number): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM medication_intakes WHERE id = ?', id);

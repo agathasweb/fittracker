@@ -50,37 +50,24 @@ export async function deleteReading(id: number): Promise<void> {
   await db.runAsync('DELETE FROM blood_pressure_readings WHERE id = ?', id);
 }
 
-export type WatchHour = {
-  hour_at: string;
-  steps: number;
-  kcal: number;
-  heart_rate: number | null;
-  spo2: number | null;
-};
-
-/** Registros horários do relógio (FC/SpO2 da hora) num dia. */
-export async function listWatchHoursOfDay(userId: number, dayISO: string): Promise<WatchHour[]> {
+/** Edita uma leitura (inclusive as antigas vindas do relógio, que passam a contar como manuais). */
+export async function updateReading(
+  id: number,
+  measuredAt: string,
+  systolic: number,
+  diastolic: number,
+  heartRate: number | null
+): Promise<void> {
   const db = await getDb();
-  return db.getAllAsync<WatchHour>(
-    `SELECT hour_at, steps, kcal, heart_rate, spo2 FROM watch_hourly
-      WHERE user_id = ? AND date(hour_at) = date(?)
-      ORDER BY hour_at`,
-    userId,
-    dayISO
+  // OR REPLACE: se já houver leitura manual no mesmo horário, a editada toma o lugar dela.
+  await db.runAsync(
+    `UPDATE OR REPLACE blood_pressure_readings
+        SET measured_at = ?, systolic = ?, diastolic = ?, heart_rate = ?, source = 'manual'
+      WHERE id = ?`,
+    measuredAt,
+    systolic,
+    diastolic,
+    heartRate,
+    id
   );
-}
-
-/**
- * Passos do dia pelo relógio. O registro das HH traz os passos da hora anterior
- * (HH-1 → HH), por isso o dia vai do registro de 01:00 ao de 00:00 do dia seguinte.
- */
-export async function watchStepsOfDay(userId: number, dayISO: string): Promise<number> {
-  const db = await getDb();
-  const r = await db.getFirstAsync<{ s: number | null }>(
-    `SELECT SUM(steps) s FROM watch_hourly
-      WHERE user_id = ? AND date(datetime(hour_at, '-1 hour')) = date(?)`,
-    userId,
-    dayISO
-  );
-  return r?.s ?? 0;
 }

@@ -158,6 +158,71 @@ export async function addSetToExercise(
   );
 }
 
+/** Inclui um exercício novo no fim da sessão, já com N séries em branco. */
+export async function addExerciseToSession(
+  sessionId: number,
+  name: string,
+  sets = 3
+): Promise<void> {
+  const nome = name.trim();
+  if (!nome) return;
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ p: number }>(
+    `SELECT COALESCE(MAX(exercise_position), -1) + 1 AS p FROM workout_session_sets WHERE session_id = ?`,
+    sessionId
+  );
+  const pos = row?.p ?? 0;
+  await db.withTransactionAsync(async () => {
+    for (let s = 1; s <= Math.max(1, sets); s++) {
+      await db.runAsync(
+        `INSERT INTO workout_session_sets
+           (session_id, exercise_name, exercise_position, set_number, done, reps, load_kg)
+         VALUES (?, ?, ?, ?, 0, NULL, NULL)`,
+        sessionId,
+        nome,
+        pos,
+        s
+      );
+    }
+  });
+}
+
+/** Renomeia um exercício da sessão (todas as séries dele). */
+export async function renameSessionExercise(
+  sessionId: number,
+  oldName: string,
+  position: number,
+  newName: string
+): Promise<void> {
+  const nome = newName.trim();
+  if (!nome || nome === oldName) return;
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE workout_session_sets SET exercise_name = ?
+      WHERE session_id = ? AND exercise_name = ? AND exercise_position = ?`,
+    nome,
+    sessionId,
+    oldName,
+    position
+  );
+}
+
+/** Remove um exercício inteiro (todas as séries) da sessão. */
+export async function deleteSessionExercise(
+  sessionId: number,
+  name: string,
+  position: number
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `DELETE FROM workout_session_sets
+      WHERE session_id = ? AND exercise_name = ? AND exercise_position = ?`,
+    sessionId,
+    name,
+    position
+  );
+}
+
 export async function deleteSet(setId: number): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM workout_session_sets WHERE id = ?', setId);

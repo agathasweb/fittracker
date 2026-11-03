@@ -8,6 +8,7 @@ import { colors } from '../../lib/theme';
 import { useRequireAuth } from '../../lib/guards';
 import { registerForPushNotificationsAsync } from '../../lib/push';
 import { syncMedicationAlarms } from '../../lib/alarms';
+import { disconnectWatch } from '../../lib/watch';
 
 export default function TabsLayout() {
   const auth = useRequireAuth();
@@ -25,6 +26,8 @@ export default function TabsLayout() {
       });
       // Migra lembretes antigos pro alarme nativo e reagenda (idempotente).
       syncMedicationAlarms(authedUser.id).catch(() => {});
+      // Relógio removido do app: garante que a sync/mensagens nativas fiquem desligadas.
+      disconnectWatch(authedUser.id);
     }
   }, [authedUser?.id]);
 

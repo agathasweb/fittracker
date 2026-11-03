@@ -5,6 +5,7 @@ import { useFocusEffect } from 'expo-router';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,19 +13,29 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { Input } from '../../components/Input';
+import { MuscleButton } from '../../components/MuscleMap';
 import { useAuth } from '../../lib/auth';
 import { DeepSeekError, estimateWorkoutCalories, hasApiKey } from '../../lib/ai/deepseek';
 import {
+  addExerciseToSession,
   addSetToExercise,
   deleteSession,
+  deleteSessionExercise,
   deleteSet,
   getSessionFull,
+  renameSessionExercise,
   setSessionKcal,
   updateSet,
 } from '../../lib/repos/workoutSessions';
 import { colors, radius, spacing } from '../../lib/theme';
+import { useSheetBottomPadding } from '../../lib/safeArea';
 import { WorkoutSessionFull, WorkoutSessionSet } from '../../lib/types';
+
+/** Janela de exercício: incluir um novo ou renomear um existente. */
+type ExForm = { mode: 'add' } | { mode: 'rename'; name: string; position: number };
 
 export default function WorkoutSessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -35,6 +46,10 @@ export default function WorkoutSessionScreen() {
 
   const [session, setSession] = useState<WorkoutSessionFull | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exForm, setExForm] = useState<ExForm | null>(null);
+  const [exName, setExName] = useState('');
+  const [exSets, setExSets] = useState('3');
+  const sheetBottom = useSheetBottomPadding();
 
   const load = useCallback(async () => {
     const s = await getSessionFull(sessionId);
@@ -115,6 +130,52 @@ export default function WorkoutSessionScreen() {
     }
   }
 
+  function abrirNovoExercicio() {
+    setExName('');
+    setExSets('3');
+    setExForm({ mode: 'add' });
+  }
+
+  function menuExercicio(name: string, position: number) {
+    Alert.alert(name, undefined, [
+      {
+        text: 'Renomear',
+        onPress: () => {
+          setExName(name);
+          setExForm({ mode: 'rename', name, position });
+        },
+      },
+      {
+        text: 'Remover exercício',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Remover exercício', `Tirar "${name}" deste treino (com as séries anotadas)?`, [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Remover',
+              style: 'destructive',
+              onPress: async () => {
+                await deleteSessionExercise(sessionId, name, position);
+                await load();
+              },
+            },
+          ]),
+      },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  }
+
+  async function salvarExercicio() {
+    if (!exForm || !exName.trim()) return;
+    if (exForm.mode === 'add') {
+      await addExerciseToSession(sessionId, exName, Math.min(10, parseInt(exSets, 10) || 3));
+    } else {
+      await renameSessionExercise(sessionId, exForm.name, exForm.position, exName);
+    }
+    setExForm(null);
+    await load();
+  }
+
   function removerSessao() {
     Alert.alert('Excluir treino', 'Remover esta sessão e todos os registros dela?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -174,7 +235,13 @@ export default function WorkoutSessionScreen() {
 
         {session.exercises.map((ex) => (
           <Card key={`${ex.position}-${ex.name}`}>
-            <Text style={styles.exName}>{ex.name}</Text>
+            <View style={styles.exHeader}>
+              <Text style={[styles.exName, { flex: 1, marginBottom: 0 }]}>{ex.name}</Text>
+              <MuscleButton exerciseName={ex.name} />
+              <Pressable onPress={() => menuExercicio(ex.name, ex.position)} hitSlop={10} style={styles.exMenu}>
+                <Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
 
             <View style={styles.headerRow}>
               <Text style={[styles.colHead, styles.colSet]}>Série</Text>
@@ -229,6 +296,19 @@ export default function WorkoutSessionScreen() {
           </Card>
         ))}
 
+        {session.exercises.length === 0 && (
+          <Card>
+            <Text style={{ color: colors.textMuted, textAlign: 'center' }}>
+              Nenhum exercício ainda. Inclua abaixo o que você vai fazer.
+            </Text>
+          </Card>
+        )}
+
+        <Pressable style={styles.addEx} onPress={abrirNovoExercicio}>
+          <Ionicons name="add" size={18} color={colors.primary} />
+          <Text style={styles.addExTxt}>Incluir exercício</Text>
+        </Pressable>
+
         <Pressable style={[styles.done, estimando && styles.doneOff]} onPress={concluir} disabled={estimando}>
           {estimando ? (
             <ActivityIndicator color={colors.bg} />
@@ -237,6 +317,30 @@ export default function WorkoutSessionScreen() {
           )}
         </Pressable>
       </ScrollView>
+
+      <Modal visible={exForm != null} animationType="slide" transparent onRequestClose={() => setExForm(null)}>
+        <View style={styles.backdrop}>
+          <View style={[styles.sheet, { paddingBottom: sheetBottom }]}>
+            <Text style={styles.sheetTitle}>
+              {exForm?.mode === 'rename' ? 'Renomear exercício' : 'Incluir exercício'}
+            </Text>
+            <Input label="Nome" value={exName} onChangeText={setExName} placeholder="Ex.: Remada baixa" />
+            {exForm?.mode === 'add' && (
+              <Input
+                label="Séries"
+                value={exSets}
+                onChangeText={(v) => setExSets(v.replace(/[^0-9]/g, ''))}
+                keyboardType="number-pad"
+                placeholder="3"
+              />
+            )}
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <Button title="Cancelar" variant="secondary" onPress={() => setExForm(null)} style={{ flex: 1 }} />
+              <Button title="Salvar" onPress={salvarExercicio} style={{ flex: 1 }} />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -245,6 +349,22 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   progress: { color: colors.primary, fontSize: 15, fontWeight: '700', textAlign: 'center' },
   kcalLine: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginTop: 4 },
+  exHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  exMenu: { paddingLeft: 2 },
+  addEx: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
+    borderRadius: radius.md, paddingVertical: 12, marginBottom: spacing.md,
+  },
+  addExTxt: { color: colors.primary, fontSize: 14, fontWeight: '600', marginLeft: 4 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    padding: spacing.lg,
+  },
+  sheetTitle: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: spacing.md },
   exName: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: spacing.sm },
   headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   colHead: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },

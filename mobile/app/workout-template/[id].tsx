@@ -15,6 +15,7 @@ import {
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
+import { MuscleButton } from '../../components/MuscleMap';
 import { useAuth } from '../../lib/auth';
 import {
   createTemplate,
@@ -71,7 +72,22 @@ export default function TemplateEditorScreen() {
     setExs((prev) => [...prev, { ...VAZIA }]);
   }
   function removerExercicio(i: number) {
-    setExs((prev) => prev.filter((_, idx) => idx !== i));
+    const nomeEx = exs[i]?.name.trim();
+    const tirar = () => setExs((prev) => prev.filter((_, idx) => idx !== i));
+    if (!nomeEx) return tirar();
+    Alert.alert('Remover exercício', `Tirar "${nomeEx}" do treino? (Só vale depois de Salvar.)`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Remover', style: 'destructive', onPress: tirar },
+    ]);
+  }
+  function mover(i: number, delta: -1 | 1) {
+    setExs((prev) => {
+      const j = i + delta;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
   }
 
   async function salvar() {
@@ -150,10 +166,17 @@ export default function TemplateEditorScreen() {
         {exs.map((ex, i) => (
           <Card key={i}>
             <View style={styles.exHeader}>
-              <Text style={styles.exNum}>#{i + 1}</Text>
+              <Text style={[styles.exNum, { flex: 1 }]}>#{i + 1}</Text>
+              <MuscleButton exerciseName={ex.name} />
+              <Pressable onPress={() => mover(i, -1)} disabled={i === 0} hitSlop={6}>
+                <Ionicons name="arrow-up" size={20} color={i === 0 ? colors.border : colors.textMuted} />
+              </Pressable>
+              <Pressable onPress={() => mover(i, 1)} disabled={i === exs.length - 1} hitSlop={6}>
+                <Ionicons name="arrow-down" size={20} color={i === exs.length - 1 ? colors.border : colors.textMuted} />
+              </Pressable>
               {exs.length > 1 && (
                 <Pressable onPress={() => removerExercicio(i)} hitSlop={8}>
-                  <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                  <Ionicons name="trash-outline" size={19} color={colors.danger} />
                 </Pressable>
               )}
             </View>
@@ -177,6 +200,9 @@ export default function TemplateEditorScreen() {
 
         {erro && <Text style={styles.erro}>{erro}</Text>}
         <Button title="Salvar treino" onPress={salvar} loading={salvando} style={{ marginTop: spacing.md }} />
+        {!novo && (
+          <Button title="Excluir este treino" variant="ghost" onPress={excluir} style={{ marginTop: spacing.sm }} />
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -184,7 +210,7 @@ export default function TemplateEditorScreen() {
 
 const styles = StyleSheet.create({
   section: { color: colors.text, fontSize: 16, fontWeight: '700', marginTop: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: 4 },
-  exHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  exHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: 4 },
   exNum: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
   row: { flexDirection: 'row' },
   addEx: {

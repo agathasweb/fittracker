@@ -116,15 +116,15 @@ export default function ProteinScreen() {
     await load();
   }
 
-  function removeSource() {
-    if (!editing) return;
-    Alert.alert('Remover fonte', `Excluir "${editing.name}"? Os lançamentos já feitos continuam.`, [
+  function removeSource(src: ProteinSource | null = editing) {
+    if (!src) return;
+    Alert.alert('Remover fonte', `Excluir "${src.name}"? Os lançamentos já feitos continuam.`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Excluir',
         style: 'destructive',
         onPress: async () => {
-          await deleteSource(editing.id);
+          await deleteSource(src.id);
           setSourceOpen(false);
           await load();
         },
@@ -203,7 +203,7 @@ export default function ProteinScreen() {
         </Pressable>
       </View>
       <Text style={styles.helpText}>
-        Toque para registrar uma porção · segure para editar as gramas conforme o rótulo.
+        Toque na fonte para registrar uma porção · ✎ edita as gramas conforme o rótulo · 🗑 exclui.
       </Text>
 
       {sources.map((s) => (
@@ -221,6 +221,12 @@ export default function ProteinScreen() {
             <Text style={styles.sourceSub}>{s.portion}</Text>
           </View>
           <Text style={styles.sourceGrams}>+{fmtG(s.protein_g)} g</Text>
+          <Pressable onPress={() => openSource(s)} hitSlop={8} style={styles.sourceAction}>
+            <Ionicons name="create-outline" size={20} color={colors.textMuted} />
+          </Pressable>
+          <Pressable onPress={() => removeSource(s)} hitSlop={8} style={styles.sourceAction}>
+            <Ionicons name="trash-outline" size={19} color={colors.danger} />
+          </Pressable>
         </Pressable>
       ))}
 
@@ -274,7 +280,7 @@ export default function ProteinScreen() {
               <Button title="Salvar" onPress={saveSource} style={{ flex: 1 }} />
             </View>
             {editing && (
-              <Button title="Excluir fonte" variant="ghost" onPress={removeSource} style={{ marginTop: spacing.sm }} />
+              <Button title="Excluir fonte" variant="ghost" onPress={() => removeSource()} style={{ marginTop: spacing.sm }} />
             )}
           </View>
         </View>
@@ -369,6 +375,7 @@ const styles = StyleSheet.create({
   sourceName: { color: colors.text, fontWeight: '700', fontSize: 15 },
   sourceSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   sourceGrams: { color: colors.primary, fontWeight: '800', fontSize: 15 },
+  sourceAction: { paddingLeft: spacing.md },
   entryRow: {
     flexDirection: 'row',
     alignItems: 'center',
