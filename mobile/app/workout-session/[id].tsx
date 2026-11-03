@@ -26,6 +26,8 @@ import {
   deleteSessionExercise,
   deleteSet,
   getSessionFull,
+  LastPerformance,
+  lastPerformances,
   renameSessionExercise,
   setSessionKcal,
   updateSet,
@@ -33,6 +35,9 @@ import {
 import { colors, radius, spacing } from '../../lib/theme';
 import { useSheetBottomPadding } from '../../lib/safeArea';
 import { WorkoutSessionFull, WorkoutSessionSet } from '../../lib/types';
+
+const fmtKg = (n: number) => String(n).replace('.', ',');
+const fmtDia = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
 /** Janela de exercício: incluir um novo ou renomear um existente. */
 type ExForm = { mode: 'add' } | { mode: 'rename'; name: string; position: number };
@@ -47,6 +52,7 @@ export default function WorkoutSessionScreen() {
   const [session, setSession] = useState<WorkoutSessionFull | null>(null);
   const [loading, setLoading] = useState(true);
   const [exForm, setExForm] = useState<ExForm | null>(null);
+  const [last, setLast] = useState<Record<string, LastPerformance>>({});
   const [exName, setExName] = useState('');
   const [exSets, setExSets] = useState('3');
   const sheetBottom = useSheetBottomPadding();
@@ -54,6 +60,7 @@ export default function WorkoutSessionScreen() {
   const load = useCallback(async () => {
     const s = await getSessionFull(sessionId);
     setSession(s);
+    setLast(await lastPerformances(sessionId));
     setLoading(false);
   }, [sessionId]);
 
@@ -63,8 +70,22 @@ export default function WorkoutSessionScreen() {
     }, [load])
   );
 
-  async function toggle(set: WorkoutSessionSet) {
-    await updateSet(set.id, { done: !set.done });
+  /** Carga/reps da última vez para a mesma série (ou a última série anotada). */
+  function sugestao(exName: string, setNumber: number) {
+    const lp = last[exName];
+    if (!lp) return null;
+    return lp.sets.find((x) => x.set_number === setNumber) ?? lp.sets[lp.sets.length - 1];
+  }
+
+  async function toggle(set: WorkoutSessionSet, exName: string) {
+    const marcando = !set.done;
+    const sug = marcando ? sugestao(exName, set.set_number) : null;
+    // Marcou "feito" sem digitar: vale a carga/reps da última vez (sugerida no campo).
+    await updateSet(set.id, {
+      done: marcando,
+      ...(sug && set.load_kg == null && sug.load_kg != null ? { load_kg: sug.load_kg } : {}),
+      ...(sug && set.reps == null && sug.reps != null ? { reps: sug.reps } : {}),
+    });
     await load();
   }
 
@@ -250,13 +271,27 @@ export default function WorkoutSessionScreen() {
               <Text style={[styles.colHead, styles.colCheck]}>Feito</Text>
             </View>
 
-            {ex.sets.map((set) => (
+            {last[ex.name] && (
+              <Text style={styles.lastLine}>
+                Última vez ({fmtDia(last[ex.name].performed_at)}):{' '}
+                <Text style={styles.lastVals}>
+                  {last[ex.name].sets
+                    .map((x) => `${x.load_kg != null ? `${fmtKg(x.load_kg)} kg` : '—'}${x.reps != null ? ` × ${x.reps}` : ''}`)
+                    .join('  ·  ')}
+                </Text>
+              </Text>
+            )}
+
+            {ex.sets.map((set) => {
+              const sug = sugestao(ex.name, set.set_number);
+              return (
               <View key={set.id} style={styles.setRow}>
                 <Text style={[styles.setNum, styles.colSet]}>{set.set_number}</Text>
                 <TextInput
                   style={[styles.cell, styles.colInput, set.done && styles.cellDone]}
                   keyboardType="number-pad"
-                  placeholder="—"
+                  key={`r-${set.id}-${set.reps}`}
+                  placeholder={sug?.reps != null ? String(sug.reps) : '—'}
                   placeholderTextColor={colors.textMuted}
                   defaultValue={set.reps?.toString() ?? ''}
                   onEndEditing={(e) => alterarReps(set, e.nativeEvent.text)}
@@ -264,13 +299,14 @@ export default function WorkoutSessionScreen() {
                 <TextInput
                   style={[styles.cell, styles.colInput, set.done && styles.cellDone]}
                   keyboardType="decimal-pad"
-                  placeholder="—"
+                  key={`c-${set.id}-${set.load_kg}`}
+                  placeholder={sug?.load_kg != null ? fmtKg(sug.load_kg) : '—'}
                   placeholderTextColor={colors.textMuted}
                   defaultValue={set.load_kg?.toString() ?? ''}
                   onEndEditing={(e) => alterarCarga(set, e.nativeEvent.text)}
                 />
                 <Pressable
-                  onPress={() => toggle(set)}
+                  onPress={() => toggle(set, ex.name)}
                   style={[styles.colCheck, styles.checkWrap]}
                   hitSlop={6}
                 >
@@ -284,7 +320,8 @@ export default function WorkoutSessionScreen() {
                   <Ionicons name="close" size={16} color={colors.textMuted} />
                 </Pressable>
               </View>
-            ))}
+              );
+            })}
 
             <Pressable
               onPress={() => addSetToExercise(sessionId, ex.name, ex.position).then(load)}
@@ -349,6 +386,8 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   progress: { color: colors.primary, fontSize: 15, fontWeight: '700', textAlign: 'center' },
   kcalLine: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginTop: 4 },
+  lastLine: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm },
+  lastVals: { color: colors.primary, fontWeight: '700' },
   exHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   exMenu: { paddingLeft: 2 },
   addEx: {

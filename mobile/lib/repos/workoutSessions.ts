@@ -223,6 +223,59 @@ export async function deleteSessionExercise(
   );
 }
 
+export type LastPerformance = {
+  performed_at: string;
+  /** Séries daquela vez (com carga e/ou reps anotadas), na ordem. */
+  sets: { set_number: number; reps: number | null; load_kg: number | null }[];
+};
+
+/**
+ * Para cada exercício da sessão, a última vez ANTERIOR em que ele foi feito com carga
+ * ou reps anotadas (mesmo nome, sem diferenciar maiúsculas). Chave = nome do exercício.
+ */
+export async function lastPerformances(sessionId: number): Promise<Record<string, LastPerformance>> {
+  const db = await getDb();
+  const cur = await db.getFirstAsync<{ user_id: number; performed_at: string }>(
+    'SELECT user_id, performed_at FROM workout_sessions WHERE id = ?',
+    sessionId
+  );
+  if (!cur) return {};
+  const nomes = await db.getAllAsync<{ exercise_name: string }>(
+    'SELECT DISTINCT exercise_name FROM workout_session_sets WHERE session_id = ?',
+    sessionId
+  );
+  const out: Record<string, LastPerformance> = {};
+  for (const { exercise_name } of nomes) {
+    const prev = await db.getFirstAsync<{ id: number; performed_at: string }>(
+      `SELECT s.id, s.performed_at FROM workout_sessions s
+         JOIN workout_session_sets x ON x.session_id = s.id
+        WHERE s.user_id = ? AND s.id <> ?
+          AND (s.performed_at < ? OR (s.performed_at = ? AND s.id < ?))
+          AND lower(trim(x.exercise_name)) = lower(trim(?))
+          AND (x.load_kg IS NOT NULL OR x.reps IS NOT NULL)
+        ORDER BY s.performed_at DESC, s.id DESC
+        LIMIT 1`,
+      cur.user_id,
+      sessionId,
+      cur.performed_at,
+      cur.performed_at,
+      sessionId,
+      exercise_name
+    );
+    if (!prev) continue;
+    const sets = await db.getAllAsync<LastPerformance['sets'][number]>(
+      `SELECT set_number, reps, load_kg FROM workout_session_sets
+        WHERE session_id = ? AND lower(trim(exercise_name)) = lower(trim(?))
+          AND (load_kg IS NOT NULL OR reps IS NOT NULL)
+        ORDER BY set_number`,
+      prev.id,
+      exercise_name
+    );
+    if (sets.length) out[exercise_name] = { performed_at: prev.performed_at, sets };
+  }
+  return out;
+}
+
 export async function deleteSet(setId: number): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM workout_session_sets WHERE id = ?', setId);
