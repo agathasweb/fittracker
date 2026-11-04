@@ -31,15 +31,6 @@ export async function getTemplateFull(id: number): Promise<WorkoutTemplateFull |
   return { ...tpl, exercises };
 }
 
-export async function countTemplates(userId: number): Promise<number> {
-  const db = await getDb();
-  const row = await db.getFirstAsync<{ n: number }>(
-    'SELECT COUNT(*) AS n FROM workout_templates WHERE user_id = ?',
-    userId
-  );
-  return row?.n ?? 0;
-}
-
 /** Cria um modelo com seus exercícios numa transação. */
 export async function createTemplate(
   userId: number,
@@ -91,6 +82,24 @@ export async function updateTemplate(
     await db.runAsync('DELETE FROM workout_template_exercises WHERE template_id = ?', templateId);
     await inserirExercicios(db, templateId, exercises);
   });
+}
+
+/** Atualiza nome, observação e posição do modelo, sem tocar nos exercícios. */
+export async function updateTemplateInfo(
+  templateId: number,
+  name: string,
+  notes: string | null,
+  position: number
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE workout_templates SET name = ?, notes = ?, position = ?, updated_at = ? WHERE id = ?',
+    name.trim(),
+    notes?.trim() || null,
+    position,
+    nowISO(),
+    templateId
+  );
 }
 
 export async function deleteTemplate(id: number): Promise<void> {
