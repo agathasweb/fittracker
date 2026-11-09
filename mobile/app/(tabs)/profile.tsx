@@ -251,8 +251,8 @@ const PROVEDORES: AiProvider[] = [
     label: 'Gemini (IA)',
     helper: 'Estima as calorias do cardio e da musculação.',
     modalTitle: 'Chave do Gemini',
-    modalSub: 'Pegue em aistudio.google.com → Get API key. Começa com "AIza".',
-    placeholder: 'AIza...',
+    modalSub: 'Pegue em aistudio.google.com → Get API key (começa com "AIza" ou "AQ.").',
+    placeholder: 'AIza... ou AQ....',
     api: gemini,
   },
   {

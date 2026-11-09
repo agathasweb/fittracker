@@ -6,7 +6,8 @@ import * as SecureStore from 'expo-secure-store';
  * como a do DeepSeek.
  */
 const KEY_STORE_NAME = 'fittracker_gemini_api_key';
-const MODEL = 'gemini-2.5-flash';
+// gemini-2.5-* não aceita mais contas novas (404). 3.8-flash + thinking "low" ≈ 3 s.
+const MODEL = 'gemini-3.8-flash';
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 export async function getApiKey(): Promise<string | null> {
@@ -51,8 +52,8 @@ export async function callGemini(systemPrompt: string, userPrompt: string): Prom
         generationConfig: {
           temperature: 0.2,
           responseMimeType: 'application/json',
-          // Resposta é um JSON curto; sem "pensamento" fica mais rápido e barato.
-          thinkingConfig: { thinkingBudget: 0 },
+          // Resposta é um JSON curto: pouco "pensamento" = mais rápido e barato.
+          thinkingConfig: { thinkingLevel: 'low' },
         },
       }),
     });
