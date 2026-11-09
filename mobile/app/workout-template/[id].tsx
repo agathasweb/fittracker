@@ -18,10 +18,12 @@ import { Input } from '../../components/Input';
 import { MuscleButton } from '../../components/MuscleMap';
 import { useAuth } from '../../lib/auth';
 import {
+  archiveTemplate,
   createTemplate,
   deleteTemplate,
   getTemplateFull,
   NewTemplateExercise,
+  unarchiveTemplate,
   updateTemplate,
 } from '../../lib/repos/workoutTemplates';
 import { colors, radius, spacing } from '../../lib/theme';
@@ -43,6 +45,7 @@ export default function TemplateEditorScreen() {
   const [exs, setExs] = useState<LinhaExercicio[]>([{ ...VAZIA }]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [arquivado, setArquivado] = useState(false);
 
   useEffect(() => {
     if (novo || templateId === null) return;
@@ -50,6 +53,7 @@ export default function TemplateEditorScreen() {
       const t = await getTemplateFull(templateId);
       if (!t) return;
       setNome(t.name);
+      setArquivado(t.archived_at != null);
       setNotas(t.notes ?? '');
       setExs(
         t.exercises.length
@@ -140,6 +144,13 @@ export default function TemplateEditorScreen() {
     ]);
   }
 
+  async function alternarArquivo() {
+    if (templateId === null) return;
+    if (arquivado) await unarchiveTemplate(templateId);
+    else await archiveTemplate(templateId);
+    router.back();
+  }
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.bg }}
@@ -157,6 +168,9 @@ export default function TemplateEditorScreen() {
         }}
       />
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 60 }}>
+        {arquivado && (
+          <Text style={styles.arquivado}>Treino arquivado — não aparece em Meus treinos.</Text>
+        )}
         <Card>
           <Input label="Nome do treino" value={nome} onChangeText={setNome} placeholder="Ex.: Treino A — Pernas" />
           <Input label="Observação (opcional)" value={notas} onChangeText={setNotas} placeholder="Ex.: Segunda. Cardio ao fim." />
@@ -201,6 +215,14 @@ export default function TemplateEditorScreen() {
         {erro && <Text style={styles.erro}>{erro}</Text>}
         <Button title="Salvar treino" onPress={salvar} loading={salvando} style={{ marginTop: spacing.md }} />
         {!novo && (
+          <Button
+            title={arquivado ? 'Restaurar para Meus treinos' : 'Arquivar este treino'}
+            variant="secondary"
+            onPress={alternarArquivo}
+            style={{ marginTop: spacing.sm }}
+          />
+        )}
+        {!novo && (
           <Button title="Excluir este treino" variant="ghost" onPress={excluir} style={{ marginTop: spacing.sm }} />
         )}
       </ScrollView>
@@ -219,5 +241,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md ?? 12, paddingVertical: 12, marginTop: spacing.xs,
   },
   addExTxt: { color: colors.primary, fontSize: 14, fontWeight: '600', marginLeft: 4 },
+  arquivado: { color: colors.warning, fontSize: 13, textAlign: 'center', marginBottom: spacing.sm },
   erro: { color: colors.danger, fontSize: 14, textAlign: 'center', marginTop: spacing.md },
 });

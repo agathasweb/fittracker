@@ -350,6 +350,17 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    // Treino: a sessão só vai pro histórico ao concluir (completed_at); modelos
+    // podem ser arquivados (archived_at) em vez de apagados. Sessões antigas
+    // contam como concluídas.
+    version: 14,
+    sql: `
+      ALTER TABLE workout_sessions ADD COLUMN completed_at TEXT;
+      UPDATE workout_sessions SET completed_at = performed_at;
+      ALTER TABLE workout_templates ADD COLUMN archived_at TEXT;
+    `,
+  },
 ];
 
 async function applyMigrations(db: SQLite.SQLiteDatabase) {

@@ -164,6 +164,8 @@ export type WorkoutTemplate = {
   position: number;
   created_at: string;
   updated_at: string;
+  /** Arquivado: some da lista ativa, mas fica guardado. */
+  archived_at: string | null;
 };
 
 export type WorkoutTemplateExercise = {
@@ -189,6 +191,8 @@ export type WorkoutSession = {
   performed_at: string;
   created_at: string;
   estimated_kcal: number | null;
+  /** NULL = em andamento (fora do histórico até tocar em Concluir). */
+  completed_at: string | null;
 };
 
 export type WorkoutSessionSet = {

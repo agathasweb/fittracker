@@ -4,12 +4,26 @@ import { useCallback, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ActivityEditorModal } from '../../components/ActivityEditorModal';
 import { Card } from '../../components/Card';
+import { SwipeRow } from '../../components/SwipeRow';
 import { useAuth } from '../../lib/auth';
 import { formatTime, todayISO } from '../../lib/format';
 import { deleteActivity, listActivitiesOfDay } from '../../lib/repos/activities';
 import { seedInitialWorkoutsIfNeeded } from '../../lib/repos/workoutSeed';
-import { listSessions, SessionSummary, startSessionFromTemplate, todaySession } from '../../lib/repos/workoutSessions';
-import { listTemplates } from '../../lib/repos/workoutTemplates';
+import {
+  deleteSession,
+  listSessions,
+  openSession,
+  SessionSummary,
+  startSessionFromTemplate,
+} from '../../lib/repos/workoutSessions';
+import {
+  archiveTemplate,
+  deleteTemplate,
+  duplicateTemplate,
+  listArchivedTemplates,
+  listTemplates,
+  unarchiveTemplate,
+} from '../../lib/repos/workoutTemplates';
 import { colors, radius, spacing } from '../../lib/theme';
 import { Activity, WorkoutSession, WorkoutTemplate } from '../../lib/types';
 
@@ -20,6 +34,8 @@ export default function WorkoutsScreen() {
   const userId = user?.id ?? null;
 
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [archived, setArchived] = useState<WorkoutTemplate[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [today, setToday] = useState<WorkoutSession | null>(null);
   const [recent, setRecent] = useState<SessionSummary[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -29,7 +45,8 @@ export default function WorkoutsScreen() {
     if (!userId || !user) return;
     await seedInitialWorkoutsIfNeeded(userId, user.email);
     setTemplates(await listTemplates(userId));
-    setToday(await todaySession(userId, todayISO()));
+    setArchived(await listArchivedTemplates(userId));
+    setToday(await openSession(userId));
     setRecent((await listSessions(userId, 3)));
     setActivities(await listActivitiesOfDay(userId, todayISO()));
   }, [userId, user]);
@@ -43,6 +60,17 @@ export default function WorkoutsScreen() {
   if (!user || !userId) return null;
 
   async function iniciar(templateId: number) {
+    if (today) {
+      Alert.alert(
+        'Treino em andamento',
+        `"${today.name}" ainda não foi concluído. Continue nele ou conclua/descarte antes de começar outro.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Continuar treino', onPress: () => router.push(`/workout-session/${today.id}`) },
+        ]
+      );
+      return;
+    }
     const id = await startSessionFromTemplate(userId!, templateId);
     router.push(`/workout-session/${id}`);
   }
@@ -61,6 +89,74 @@ export default function WorkoutsScreen() {
       ],
       { cancelable: true }
     );
+  }
+
+  function descartarEmAndamento(s: WorkoutSession) {
+    Alert.alert('Descartar treino', `Apagar "${s.name}" (em andamento) com tudo que foi anotado nele?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Descartar',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteSession(s.id);
+          await load();
+        },
+      },
+    ]);
+  }
+
+  function arquivar(t: WorkoutTemplate) {
+    Alert.alert(
+      'Arquivar treino',
+      `"${t.name}" sai de Meus treinos e fica guardado em Arquivados, com o histórico intacto. Dá para restaurar depois.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Arquivar',
+          onPress: async () => {
+            await archiveTemplate(t.id);
+            await load();
+          },
+        },
+      ]
+    );
+  }
+
+  function menuArquivado(t: WorkoutTemplate) {
+    Alert.alert(t.name, 'Treino arquivado', [
+      {
+        text: 'Restaurar',
+        onPress: async () => {
+          await unarchiveTemplate(t.id);
+          await load();
+        },
+      },
+      {
+        text: 'Duplicar como novo',
+        onPress: async () => {
+          const id = await duplicateTemplate(t.id);
+          router.push(`/workout-template/${id}`);
+        },
+      },
+      { text: 'Ver / editar', onPress: () => router.push(`/workout-template/${t.id}`) },
+      {
+        text: 'Excluir de vez',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Excluir treino', `Apagar "${t.name}" de vez? Os treinos já feitos continuam no histórico.`, [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Excluir',
+              style: 'destructive',
+              onPress: async () => {
+                await deleteTemplate(t.id);
+                await load();
+              },
+            },
+          ]),
+      },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
   }
 
   function confirmRemoveActivity(a: Activity) {
@@ -86,12 +182,20 @@ export default function WorkoutsScreen() {
         {today ? (
           <Pressable onPress={() => router.push(`/workout-session/${today.id}`)}>
             <Card>
-              <Text style={styles.label}>TREINO DE HOJE</Text>
+              <Text style={styles.label}>TREINO EM ANDAMENTO</Text>
               <Text style={styles.todayName}>{today.name}</Text>
               <View style={styles.rowBetween}>
-                <Text style={styles.todaySub}>{formatTime(today.performed_at)} · toque para continuar</Text>
+                <Text style={styles.todaySub}>
+                  {today.performed_at.slice(0, 10) === todayISO()
+                    ? `Hoje, ${formatTime(today.performed_at)}`
+                    : `${today.performed_at.slice(8, 10)}/${today.performed_at.slice(5, 7)}`}{' '}
+                  · toque para continuar
+                </Text>
                 <Ionicons name="chevron-forward" size={20} color={colors.primary} />
               </View>
+              <Pressable onPress={() => descartarEmAndamento(today)} hitSlop={8} style={styles.discard}>
+                <Text style={styles.discardTxt}>Descartar</Text>
+              </Pressable>
             </Card>
           </Pressable>
         ) : (
@@ -130,22 +234,69 @@ export default function WorkoutsScreen() {
           </Card>
         ) : (
           templates.map((t) => (
-            <Card key={t.id}>
-              <View style={styles.rowBetween}>
-                <Pressable style={{ flex: 1 }} onPress={() => iniciar(t.id)}>
-                  <Text style={styles.tplName}>{t.name}</Text>
-                  {t.notes ? <Text style={styles.tplNotes} numberOfLines={1}>{t.notes}</Text> : null}
-                </Pressable>
-                <Pressable
-                  onPress={() => router.push(`/workout-template/${t.id}`)}
-                  hitSlop={8}
-                  style={styles.editBtn}
-                >
-                  <Ionicons name="create-outline" size={20} color={colors.textMuted} />
-                </Pressable>
-              </View>
-            </Card>
+            <SwipeRow
+              key={t.id}
+              action={{ label: 'Arquivar', icon: 'archive-outline', color: colors.warning, onPress: () => arquivar(t) }}
+            >
+              <Card>
+                <View style={styles.rowBetween}>
+                  <Pressable style={{ flex: 1 }} onPress={() => iniciar(t.id)}>
+                    <Text style={styles.tplName}>{t.name}</Text>
+                    {t.notes ? <Text style={styles.tplNotes} numberOfLines={1}>{t.notes}</Text> : null}
+                  </Pressable>
+                  <Pressable
+                    onPress={() => router.push(`/workout-template/${t.id}`)}
+                    hitSlop={8}
+                    style={styles.editBtn}
+                  >
+                    <Ionicons name="create-outline" size={20} color={colors.textMuted} />
+                  </Pressable>
+                </View>
+              </Card>
+            </SwipeRow>
           ))
+        )}
+        {templates.length > 0 && (
+          <Text style={styles.swipeHint}>Puxe um treino para a esquerda para arquivar.</Text>
+        )}
+
+        {archived.length > 0 && (
+          <>
+            <Pressable onPress={() => setShowArchived((v) => !v)} style={styles.archHeader} hitSlop={6}>
+              <Ionicons name="archive-outline" size={16} color={colors.textMuted} />
+              <Text style={styles.archTitle}>Arquivados ({archived.length})</Text>
+              <Ionicons name={showArchived ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+            </Pressable>
+            {showArchived &&
+              archived.map((t) => (
+                <SwipeRow
+                  key={t.id}
+                  action={{
+                    label: 'Restaurar',
+                    icon: 'arrow-undo-outline',
+                    color: colors.primary,
+                    onPress: async () => {
+                      await unarchiveTemplate(t.id);
+                      await load();
+                    },
+                  }}
+                >
+                  <Pressable onPress={() => menuArquivado(t)}>
+                    <Card style={styles.archCard}>
+                      <View style={styles.rowBetween}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.tplName}>{t.name}</Text>
+                          <Text style={styles.tplNotes}>
+                            Arquivado em {t.archived_at ? `${t.archived_at.slice(8, 10)}/${t.archived_at.slice(5, 7)}/${t.archived_at.slice(0, 4)}` : '—'}
+                          </Text>
+                        </View>
+                        <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
+                      </View>
+                    </Card>
+                  </Pressable>
+                </SwipeRow>
+              ))}
+          </>
         )}
 
         {/* ── Histórico + evolução ── */}
@@ -253,6 +404,12 @@ const styles = StyleSheet.create({
   link: { color: colors.primary, fontSize: 14, fontWeight: '700' },
   tplName: { color: colors.text, fontSize: 15, fontWeight: '600' },
   tplNotes: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  discard: { alignSelf: 'flex-start', marginTop: spacing.sm },
+  discardTxt: { color: colors.danger, fontSize: 13, fontWeight: '600' },
+  swipeHint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: -4, marginBottom: spacing.sm },
+  archHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4, paddingVertical: spacing.sm },
+  archTitle: { color: colors.textMuted, fontSize: 14, fontWeight: '700', flex: 1 },
+  archCard: { opacity: 0.75 },
   editBtn: { padding: 6, marginLeft: spacing.sm },
   emptySub: { color: colors.textMuted, fontSize: 13, lineHeight: 19 },
   activityRow: {

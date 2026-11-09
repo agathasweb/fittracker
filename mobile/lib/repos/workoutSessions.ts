@@ -6,7 +6,7 @@ import {
   WorkoutSessionFull,
   WorkoutSessionSet,
 } from '../types';
-import { getTemplateFull } from './workoutTemplates';
+import { createTemplate, getTemplateFull, NewTemplateExercise, updateTemplate } from './workoutTemplates';
 
 type SetRow = Omit<WorkoutSessionSet, 'done'> & { done: number };
 
@@ -249,7 +249,7 @@ export async function lastPerformances(sessionId: number): Promise<Record<string
     const prev = await db.getFirstAsync<{ id: number; performed_at: string }>(
       `SELECT s.id, s.performed_at FROM workout_sessions s
          JOIN workout_session_sets x ON x.session_id = s.id
-        WHERE s.user_id = ? AND s.id <> ?
+        WHERE s.user_id = ? AND s.id <> ? AND s.completed_at IS NOT NULL
           AND (s.performed_at < ? OR (s.performed_at = ? AND s.id < ?))
           AND lower(trim(x.exercise_name)) = lower(trim(?))
           AND (x.load_kg IS NOT NULL OR x.reps IS NOT NULL)
@@ -311,7 +311,27 @@ export type SessionSummary = WorkoutSession & {
   total_load: number;
 };
 
-/** Histórico: sessões com contagem de séries feitas e volume total (kg×reps). */
+/** Fecha a sessão: a partir daqui ela aparece no histórico. */
+export async function completeSession(id: number): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE workout_sessions SET completed_at = COALESCE(completed_at, ?) WHERE id = ?',
+    nowISO(),
+    id
+  );
+}
+
+/** Corrige o dia de uma sessão lançada na data errada (mantém o horário). */
+export async function setSessionDate(id: number, dayISO: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE workout_sessions SET performed_at = ? || substr(performed_at, 11) WHERE id = ?`,
+    dayISO,
+    id
+  );
+}
+
+/** Histórico (só concluídas): sessões com contagem de séries feitas e volume total (kg×reps). */
 export async function listSessions(userId: number, limit = 60): Promise<SessionSummary[]> {
   const db = await getDb();
   return db.getAllAsync<SessionSummary>(
@@ -321,7 +341,7 @@ export async function listSessions(userId: number, limit = 60): Promise<SessionS
             COALESCE(SUM(CASE WHEN ss.done = 1 THEN ss.reps * ss.load_kg ELSE 0 END), 0) AS total_load
        FROM workout_sessions s
        LEFT JOIN workout_session_sets ss ON ss.session_id = s.id
-      WHERE s.user_id = ?
+      WHERE s.user_id = ? AND s.completed_at IS NOT NULL
       GROUP BY s.id
       ORDER BY s.performed_at DESC
       LIMIT ?`,
@@ -330,15 +350,74 @@ export async function listSessions(userId: number, limit = 60): Promise<SessionS
   );
 }
 
-export async function todaySession(userId: number, dayISO: string): Promise<WorkoutSession | null> {
+/** Sessão em andamento (ainda não concluída), a mais recente. */
+export async function openSession(userId: number): Promise<WorkoutSession | null> {
   const db = await getDb();
   return db.getFirstAsync<WorkoutSession>(
     `SELECT * FROM workout_sessions
-      WHERE user_id = ? AND date(performed_at) = date(?)
-      ORDER BY id DESC LIMIT 1`,
-    userId,
-    dayISO
+      WHERE user_id = ? AND completed_at IS NULL
+      ORDER BY performed_at DESC, id DESC LIMIT 1`,
+    userId
   );
+}
+
+export type TemplateSyncInfo =
+  /** A sessão bate com o modelo: nada a salvar. */
+  | { status: 'igual' }
+  /** Exercícios/séries mudaram em relação ao modelo de origem. */
+  | { status: 'diferente'; templateId: number; templateName: string }
+  /** Sessão sem modelo (livre, ou o modelo foi excluído). */
+  | { status: 'sem-modelo' };
+
+const norm = (n: string) => n.trim().toLowerCase();
+
+/** Compara exercícios (nome, ordem) e nº de séries da sessão com o modelo de origem. */
+export async function templateSyncInfo(sessionId: number): Promise<TemplateSyncInfo> {
+  const s = await getSessionFull(sessionId);
+  if (!s || s.exercises.length === 0) return { status: 'igual' };
+  const tpl = s.template_id ? await getTemplateFull(s.template_id) : null;
+  if (!tpl) return { status: 'sem-modelo' };
+  const igual =
+    tpl.exercises.length === s.exercises.length &&
+    tpl.exercises.every(
+      (e, i) => norm(e.name) === norm(s.exercises[i].name) && e.target_sets === s.exercises[i].sets.length
+    );
+  return igual ? { status: 'igual' } : { status: 'diferente', templateId: tpl.id, templateName: tpl.name };
+}
+
+/**
+ * Grava no modelo de origem a lista de exercícios desta sessão (nomes, ordem e nº de séries),
+ * pra valer nos próximos treinos. Reps-alvo e observações são mantidas para os exercícios que
+ * continuam (casados pelo nome; se renomeado, pela posição original). Sem modelo, cria um novo.
+ */
+export async function saveSessionAsTemplate(sessionId: number): Promise<number | null> {
+  const s = await getSessionFull(sessionId);
+  if (!s || s.exercises.length === 0) return null;
+  const tpl = s.template_id ? await getTemplateFull(s.template_id) : null;
+
+  const usados = new Set<number>();
+  const lista: NewTemplateExercise[] = s.exercises.map((ex) => {
+    const sobra = tpl?.exercises.filter((e) => !usados.has(e.id)) ?? [];
+    const par =
+      sobra.find((e) => norm(e.name) === norm(ex.name)) ??
+      sobra.find((e) => e.position === ex.position && !s.exercises.some((o) => norm(o.name) === norm(e.name)));
+    if (par) usados.add(par.id);
+    return {
+      name: ex.name,
+      target_sets: Math.max(1, ex.sets.length),
+      target_reps: par?.target_reps ?? null,
+      notes: par?.notes ?? null,
+    };
+  });
+
+  if (tpl) {
+    await updateTemplate(tpl.id, tpl.name, lista, tpl.notes);
+    return tpl.id;
+  }
+  const novoId = await createTemplate(s.user_id, s.name, lista, s.notes);
+  const db = await getDb();
+  await db.runAsync('UPDATE workout_sessions SET template_id = ? WHERE id = ?', novoId, sessionId);
+  return novoId;
 }
 
 export type ExerciseProgressPoint = {
@@ -360,7 +439,8 @@ export async function exerciseProgress(
             MAX(ss.reps) AS top_reps
        FROM workout_session_sets ss
        JOIN workout_sessions s ON s.id = ss.session_id
-      WHERE s.user_id = ? AND ss.exercise_name = ? AND ss.done = 1 AND ss.load_kg IS NOT NULL
+      WHERE s.user_id = ? AND s.completed_at IS NOT NULL
+        AND ss.exercise_name = ? AND ss.done = 1 AND ss.load_kg IS NOT NULL
       GROUP BY date(s.performed_at)
       ORDER BY date(s.performed_at) ASC
       LIMIT ?`,
@@ -378,7 +458,7 @@ export async function loggedExerciseNames(userId: number): Promise<string[]> {
     `SELECT DISTINCT ss.exercise_name
        FROM workout_session_sets ss
        JOIN workout_sessions s ON s.id = ss.session_id
-      WHERE s.user_id = ? AND ss.done = 1 AND ss.load_kg IS NOT NULL
+      WHERE s.user_id = ? AND s.completed_at IS NOT NULL AND ss.done = 1 AND ss.load_kg IS NOT NULL
       ORDER BY ss.exercise_name`,
     userId
   );

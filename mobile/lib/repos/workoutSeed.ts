@@ -203,7 +203,8 @@ async function semear(userId: number, email: string): Promise<boolean> {
   const versao = await getVersion(userId);
   if (versao >= PLAN_VERSION) return false;
 
-  const existentes = await listTemplates(userId);
+  // Arquivados entram: senão uma versão nova do plano recriaria o modelo que o usuário arquivou.
+  const existentes = await listTemplates(userId, { incluirArquivados: true });
   const v1 = new Set(PLANOS_V1[key] ?? []);
   for (const t of existentes) {
     if (v1.has(t.name)) await deleteTemplate(t.id);

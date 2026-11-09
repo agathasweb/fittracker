@@ -9,11 +9,68 @@ export type NewTemplateExercise = {
   notes?: string | null;
 };
 
-export async function listTemplates(userId: number): Promise<WorkoutTemplate[]> {
+/** Modelos ativos (padrão) ou todos, incluindo os arquivados. */
+export async function listTemplates(
+  userId: number,
+  opts: { incluirArquivados?: boolean } = {}
+): Promise<WorkoutTemplate[]> {
   const db = await getDb();
   return db.getAllAsync<WorkoutTemplate>(
-    'SELECT * FROM workout_templates WHERE user_id = ? ORDER BY position, id',
+    `SELECT * FROM workout_templates WHERE user_id = ?
+       ${opts.incluirArquivados ? '' : 'AND archived_at IS NULL'}
+      ORDER BY position, id`,
     userId
+  );
+}
+
+/** Arquivados, do mais recente pro mais antigo. */
+export async function listArchivedTemplates(userId: number): Promise<WorkoutTemplate[]> {
+  const db = await getDb();
+  return db.getAllAsync<WorkoutTemplate>(
+    `SELECT * FROM workout_templates WHERE user_id = ? AND archived_at IS NOT NULL
+      ORDER BY archived_at DESC, id DESC`,
+    userId
+  );
+}
+
+export async function archiveTemplate(id: number): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE workout_templates SET archived_at = ?, updated_at = ? WHERE id = ?',
+    nowISO(),
+    nowISO(),
+    id
+  );
+}
+
+/** Volta pra lista ativa, no fim dela. */
+export async function unarchiveTemplate(id: number): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE workout_templates
+        SET archived_at = NULL, updated_at = ?,
+            position = (SELECT COALESCE(MAX(position), -1) + 1 FROM workout_templates t
+                         WHERE t.user_id = workout_templates.user_id AND t.archived_at IS NULL)
+      WHERE id = ?`,
+    nowISO(),
+    id
+  );
+}
+
+/** Cria um modelo ativo novo com os mesmos exercícios (ponto de partida pra um treino novo). */
+export async function duplicateTemplate(id: number, newName?: string): Promise<number> {
+  const tpl = await getTemplateFull(id);
+  if (!tpl) throw new Error('Modelo de treino não encontrado');
+  return createTemplate(
+    tpl.user_id,
+    newName?.trim() || `${tpl.name} (cópia)`,
+    tpl.exercises.map((e) => ({
+      name: e.name,
+      target_sets: e.target_sets,
+      target_reps: e.target_reps,
+      notes: e.notes,
+    })),
+    tpl.notes
   );
 }
 
@@ -43,7 +100,7 @@ export async function createTemplate(
 
   await db.withTransactionAsync(async () => {
     const posRow = await db.getFirstAsync<{ p: number }>(
-      'SELECT COALESCE(MAX(position), -1) + 1 AS p FROM workout_templates WHERE user_id = ?',
+      'SELECT COALESCE(MAX(position), -1) + 1 AS p FROM workout_templates WHERE user_id = ? AND archived_at IS NULL',
       userId
     );
     const r = await db.runAsync(

@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../components/Card';
 import { useAuth } from '../lib/auth';
-import { listSessions, SessionSummary } from '../lib/repos/workoutSessions';
+import { deleteSession, listSessions, SessionSummary } from '../lib/repos/workoutSessions';
 import { colors, spacing } from '../lib/theme';
 
 export default function WorkoutHistoryScreen() {
@@ -18,6 +18,20 @@ export default function WorkoutHistoryScreen() {
     setSessions(await listSessions(userId, 100));
   }, [userId]);
 
+  function excluir(s: SessionSummary) {
+    Alert.alert('Excluir treino', `Apagar "${s.name}" de ${s.performed_at.slice(8, 10)}/${s.performed_at.slice(5, 7)} com todas as séries anotadas?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Excluir',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteSession(s.id);
+          await load();
+        },
+      },
+    ]);
+  }
+
   useFocusEffect(
     useCallback(() => {
       load();
@@ -30,23 +44,26 @@ export default function WorkoutHistoryScreen() {
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 60 }}>
         {sessions.length === 0 ? (
           <Card>
-            <Text style={styles.empty}>Nenhuma sessão registrada ainda.</Text>
+            <Text style={styles.empty}>Nenhum treino concluído ainda. Os treinos aparecem aqui depois de tocar em Concluir.</Text>
           </Card>
         ) : (
           sessions.map((s) => (
-            <Pressable key={s.id} onPress={() => router.push(`/workout-session/${s.id}`)}>
-              <Card>
+            <Card key={s.id}>
                 <View style={styles.row}>
-                  <View style={{ flex: 1 }}>
+                  <Pressable style={{ flex: 1 }} onPress={() => router.push(`/workout-session/${s.id}`)}>
                     <Text style={styles.name}>{s.name}</Text>
                     <Text style={styles.meta}>
                       {s.performed_at.slice(0, 10)} · {s.done_sets}/{s.total_sets} séries · {Math.round(s.total_load)} kg de volume
                     </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                  </Pressable>
+                  <Pressable onPress={() => router.push(`/workout-session/${s.id}`)} hitSlop={8} style={styles.icon}>
+                    <Ionicons name="create-outline" size={19} color={colors.textMuted} />
+                  </Pressable>
+                  <Pressable onPress={() => excluir(s)} hitSlop={8} style={styles.icon}>
+                    <Ionicons name="trash-outline" size={19} color={colors.danger} />
+                  </Pressable>
                 </View>
-              </Card>
-            </Pressable>
+            </Card>
           ))
         )}
       </ScrollView>
@@ -58,5 +75,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   name: { color: colors.text, fontSize: 15, fontWeight: '600' },
   meta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  icon: { padding: 6, marginLeft: 4 },
   empty: { color: colors.textMuted, fontSize: 13 },
 });

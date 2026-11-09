@@ -22,6 +22,7 @@ import { DeepSeekError, estimateWorkoutCalories, hasApiKey } from '../../lib/ai/
 import {
   addExerciseToSession,
   addSetToExercise,
+  completeSession,
   deleteSession,
   deleteSessionExercise,
   deleteSet,
@@ -29,7 +30,11 @@ import {
   LastPerformance,
   lastPerformances,
   renameSessionExercise,
+  saveSessionAsTemplate,
+  setSessionDate,
   setSessionKcal,
+  TemplateSyncInfo,
+  templateSyncInfo,
   updateSet,
 } from '../../lib/repos/workoutSessions';
 import { colors, radius, spacing } from '../../lib/theme';
@@ -38,6 +43,32 @@ import { WorkoutSessionFull, WorkoutSessionSet } from '../../lib/types';
 
 const fmtKg = (n: number) => String(n).replace('.', ',');
 const fmtDia = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const fmtData = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+
+/** "DD/MM/AAAA" (ou DD/MM, ano atual) → "AAAA-MM-DD"; null se inválida. */
+function parseData(txt: string): string | null {
+  const m = txt.trim().match(/^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?$/);
+  if (!m) return null;
+  const d = Number(m[1]);
+  const mes = Number(m[2]);
+  let a = m[3] ? Number(m[3]) : new Date().getFullYear();
+  if (a < 100) a += 2000;
+  const dt = new Date(a, mes - 1, d);
+  if (dt.getFullYear() !== a || dt.getMonth() !== mes - 1 || dt.getDate() !== d) return null;
+  return `${a}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/** Alert com botões que devolve a escolha (índice do botão). */
+function perguntar(titulo: string, msg: string, botoes: { text: string; style?: 'cancel' | 'destructive' }[]) {
+  return new Promise<number>((resolve) =>
+    Alert.alert(
+      titulo,
+      msg,
+      botoes.map((b, i) => ({ ...b, onPress: () => resolve(i) })),
+      { cancelable: true, onDismiss: () => resolve(-1) }
+    )
+  );
+}
 
 /** Janela de exercício: incluir um novo ou renomear um existente. */
 type ExForm = { mode: 'add' } | { mode: 'rename'; name: string; position: number };
@@ -55,12 +86,16 @@ export default function WorkoutSessionScreen() {
   const [last, setLast] = useState<Record<string, LastPerformance>>({});
   const [exName, setExName] = useState('');
   const [exSets, setExSets] = useState('3');
+  const [sync, setSync] = useState<TemplateSyncInfo>({ status: 'igual' });
+  const [salvandoModelo, setSalvandoModelo] = useState(false);
+  const [dataForm, setDataForm] = useState<string | null>(null);
   const sheetBottom = useSheetBottomPadding();
 
   const load = useCallback(async () => {
     const s = await getSessionFull(sessionId);
     setSession(s);
     setLast(await lastPerformances(sessionId));
+    setSync(await templateSyncInfo(sessionId));
     setLoading(false);
   }, [sessionId]);
 
@@ -100,11 +135,74 @@ export default function WorkoutSessionScreen() {
     await updateSet(set.id, { load_kg: Number.isNaN(n as number) ? null : n });
   }
 
+  /** Grava no modelo os exercícios/séries desta sessão (valem nos próximos treinos). */
+  async function salvarNoModelo() {
+    setSalvandoModelo(true);
+    try {
+      await saveSessionAsTemplate(sessionId);
+      await load();
+    } finally {
+      setSalvandoModelo(false);
+    }
+  }
+
+  function confirmarSalvarNoModelo() {
+    const msg =
+      sync.status === 'diferente'
+        ? `Os exercícios e séries deste treino passam a valer no modelo "${sync.templateName}" — da próxima vez ele já abre assim. Os treinos já feitos não mudam.`
+        : 'Cria um treino novo em "Meus treinos" com os exercícios e séries desta sessão.';
+    Alert.alert('Salvar alterações', msg, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Salvar', onPress: salvarNoModelo },
+    ]);
+  }
+
+  async function salvarData() {
+    if (dataForm === null) return;
+    const dia = parseData(dataForm);
+    if (!dia) {
+      Alert.alert('Data inválida', 'Use o formato DD/MM/AAAA.');
+      return;
+    }
+    await setSessionDate(sessionId, dia);
+    setDataForm(null);
+    await load();
+  }
+
   async function concluir() {
     if (!session || auth.status !== 'authed') {
       router.back();
       return;
     }
+    if (session.completed_at) {
+      router.back(); // editando um treino do histórico: as mudanças já ficaram gravadas
+      return;
+    }
+
+    if (sync.status === 'diferente') {
+      const r = await perguntar(
+        'Salvar alterações no modelo?',
+        `Você mudou exercícios ou séries em relação ao "${sync.templateName}". Quer que os próximos treinos já venham assim?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Só neste treino' },
+          { text: 'Salvar no modelo' },
+        ]
+      );
+      if (r <= 0) return;
+      if (r === 2) await saveSessionAsTemplate(sessionId);
+    }
+
+    const algumaFeita = session.exercises.some((ex) => ex.sets.some((s) => s.done));
+    if (!algumaFeita) {
+      const r = await perguntar(
+        'Nenhuma série marcada',
+        'Nenhuma série foi marcada como feita. Concluir e mandar pro histórico mesmo assim?',
+        [{ text: 'Voltar', style: 'cancel' }, { text: 'Concluir' }]
+      );
+      if (r !== 1) return;
+    }
+    await completeSession(sessionId);
 
     // Resumo dos exercícios com pelo menos uma série feita.
     const exercises = session.exercises
@@ -121,7 +219,9 @@ export default function WorkoutSessionScreen() {
       .filter((e): e is NonNullable<typeof e> => e !== null);
 
     if (exercises.length === 0) {
-      router.back(); // nada concluído — não há o que estimar
+      Alert.alert('Treino concluído', 'O treino foi para o histórico.', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
       return;
     }
 
@@ -246,6 +346,22 @@ export default function WorkoutSessionScreen() {
       />
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 60 }}>
         <Card>
+          <View style={styles.statusRow}>
+            <View style={[styles.badge, session.completed_at ? styles.badgeDone : styles.badgeOpen]}>
+              <Text style={[styles.badgeTxt, session.completed_at ? styles.badgeTxtDone : null]}>
+                {session.completed_at ? 'Concluído' : 'Em andamento'}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setDataForm(fmtData(session.performed_at))}
+              hitSlop={8}
+              style={styles.dateBtn}
+            >
+              <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
+              <Text style={styles.dateTxt}>{fmtData(session.performed_at)}</Text>
+              <Ionicons name="pencil" size={12} color={colors.textMuted} />
+            </Pressable>
+          </View>
           <Text style={styles.progress}>
             {feitas}/{total} séries concluídas
           </Text>
@@ -253,6 +369,23 @@ export default function WorkoutSessionScreen() {
             <Text style={styles.kcalLine}>≈ {session.estimated_kcal} kcal gastas (estimativa IA)</Text>
           )}
         </Card>
+
+        {sync.status !== 'igual' && session.exercises.length > 0 && (
+          <Card>
+            <Text style={styles.syncTxt}>
+              {sync.status === 'diferente'
+                ? `Este treino está diferente do modelo "${sync.templateName}". Salve para os próximos treinos já virem assim.`
+                : 'Treino sem modelo. Salve para reaproveitar estes exercícios nos próximos treinos.'}
+            </Text>
+            <Button
+              title={sync.status === 'diferente' ? 'Salvar alterações no modelo' : 'Salvar como novo treino'}
+              variant="secondary"
+              onPress={confirmarSalvarNoModelo}
+              loading={salvandoModelo}
+              style={{ marginTop: spacing.sm }}
+            />
+          </Card>
+        )}
 
         {session.exercises.map((ex) => (
           <Card key={`${ex.position}-${ex.name}`}>
@@ -350,10 +483,37 @@ export default function WorkoutSessionScreen() {
           {estimando ? (
             <ActivityIndicator color={colors.bg} />
           ) : (
-            <Text style={styles.doneTxt}>Concluir e estimar calorias</Text>
+            <Text style={styles.doneTxt}>
+              {session.completed_at ? 'Pronto' : 'Concluir treino'}
+            </Text>
           )}
         </Pressable>
+        {!session.completed_at && (
+          <Text style={styles.hint}>
+            O treino só vai para o histórico quando você tocar em Concluir. Pode sair e voltar depois:
+            ele fica em andamento na aba Treinos.
+          </Text>
+        )}
       </ScrollView>
+
+      <Modal visible={dataForm != null} animationType="slide" transparent onRequestClose={() => setDataForm(null)}>
+        <View style={styles.backdrop}>
+          <View style={[styles.sheet, { paddingBottom: sheetBottom }]}>
+            <Text style={styles.sheetTitle}>Data do treino</Text>
+            <Input
+              label="Dia (DD/MM/AAAA)"
+              value={dataForm ?? ''}
+              onChangeText={setDataForm}
+              keyboardType="numbers-and-punctuation"
+              placeholder="09/11/2026"
+            />
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <Button title="Cancelar" variant="secondary" onPress={() => setDataForm(null)} style={{ flex: 1 }} />
+              <Button title="Salvar" onPress={salvarData} style={{ flex: 1 }} />
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={exForm != null} animationType="slide" transparent onRequestClose={() => setExForm(null)}>
         <View style={styles.backdrop}>
@@ -384,6 +544,16 @@ export default function WorkoutSessionScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
+  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 1 },
+  badgeOpen: { borderColor: colors.textMuted },
+  badgeDone: { borderColor: colors.primary, backgroundColor: colors.primary },
+  badgeTxt: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
+  badgeTxtDone: { color: colors.bg },
+  dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dateTxt: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
+  syncTxt: { color: colors.text, fontSize: 13, lineHeight: 19 },
+  hint: { color: colors.textMuted, fontSize: 12, textAlign: 'center', marginTop: spacing.sm, lineHeight: 17 },
   progress: { color: colors.primary, fontSize: 15, fontWeight: '700', textAlign: 'center' },
   kcalLine: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginTop: 4 },
   lastLine: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm },
