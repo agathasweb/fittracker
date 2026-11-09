@@ -33,6 +33,23 @@ export async function createActivity(a: NewActivity): Promise<Activity> {
   return created;
 }
 
+/** Corrige uma atividade já lançada (mantém o dia/horário original). */
+export async function updateActivity(
+  id: number,
+  a: Pick<NewActivity, 'name' | 'duration_min' | 'distance_km' | 'kcal' | 'notes'>
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE activities SET name = ?, duration_min = ?, distance_km = ?, kcal = ?, notes = ? WHERE id = ?`,
+    a.name.trim(),
+    Math.round(a.duration_min),
+    a.distance_km ?? null,
+    Math.round(a.kcal),
+    a.notes?.trim() || null,
+    id
+  );
+}
+
 export async function deleteActivity(id: number): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM activities WHERE id = ?', id);

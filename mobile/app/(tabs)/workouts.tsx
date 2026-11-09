@@ -40,6 +40,7 @@ export default function WorkoutsScreen() {
   const [recent, setRecent] = useState<SessionSummary[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
 
   const load = useCallback(async () => {
     if (!userId || !user) return;
@@ -340,7 +341,13 @@ export default function WorkoutsScreen() {
         {/* ── Cardio / atividades (recurso existente, preservado) ── */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Cardio de hoje</Text>
-          <Pressable onPress={() => setEditorOpen(true)} hitSlop={8}>
+          <Pressable
+            onPress={() => {
+              setEditingActivity(null);
+              setEditorOpen(true);
+            }}
+            hitSlop={8}
+          >
             <Text style={styles.link}>+ Registrar</Text>
           </Pressable>
         </View>
@@ -351,13 +358,29 @@ export default function WorkoutsScreen() {
             <Text style={styles.label}>{cardioKcal} kcal queimadas hoje</Text>
             {activities.map((a) => (
               <View key={a.id} style={styles.activityRow}>
-                <View style={{ flex: 1 }}>
+                <Pressable
+                  style={{ flex: 1 }}
+                  onPress={() => {
+                    setEditingActivity(a);
+                    setEditorOpen(true);
+                  }}
+                >
                   <Text style={styles.tplName}>{a.name}</Text>
                   <Text style={styles.tplNotes}>
                     {formatTime(a.performed_at)} · {a.duration_min} min{a.distance_km ? ` · ${a.distance_km} km` : ''}
                   </Text>
-                </View>
+                </Pressable>
                 <Text style={styles.activityKcal}>{a.kcal} kcal</Text>
+                <Pressable
+                  onPress={() => {
+                    setEditingActivity(a);
+                    setEditorOpen(true);
+                  }}
+                  hitSlop={8}
+                  style={{ marginLeft: spacing.sm }}
+                >
+                  <Ionicons name="create-outline" size={18} color={colors.textMuted} />
+                </Pressable>
                 <Pressable onPress={() => confirmRemoveActivity(a)} hitSlop={8} style={{ marginLeft: spacing.sm }}>
                   <Ionicons name="trash-outline" size={18} color={colors.danger} />
                 </Pressable>
@@ -374,9 +397,11 @@ export default function WorkoutsScreen() {
       <ActivityEditorModal
         visible={editorOpen}
         user={user}
+        activity={editingActivity}
         onClose={() => setEditorOpen(false)}
         onSaved={async () => {
           setEditorOpen(false);
+          setEditingActivity(null);
           await load();
         }}
       />

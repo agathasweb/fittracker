@@ -18,7 +18,7 @@ import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
 import { MuscleButton } from '../../components/MuscleMap';
 import { useAuth } from '../../lib/auth';
-import { DeepSeekError, estimateWorkoutCalories, hasApiKey } from '../../lib/ai/deepseek';
+import { DeepSeekError, estimateWorkoutCalories, hasCaloriesKey } from '../../lib/ai/deepseek';
 import {
   addExerciseToSession,
   addSetToExercise,
@@ -225,10 +225,10 @@ export default function WorkoutSessionScreen() {
       return;
     }
 
-    if (!(await hasApiKey())) {
+    if (!(await hasCaloriesKey())) {
       Alert.alert(
         'Estimar calorias',
-        'Para estimar o gasto calórico da musculação com IA, cadastre sua chave DeepSeek no Perfil. O treino foi salvo mesmo assim.',
+        'Para estimar o gasto calórico da musculação com IA, cadastre a chave do Gemini em Perfil → Integrações. O treino foi salvo mesmo assim.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
       return;

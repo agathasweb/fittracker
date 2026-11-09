@@ -12,16 +12,18 @@ import {
   View,
 } from 'react-native';
 import * as deepseek from '../lib/ai/deepseek';
-import { createActivity } from '../lib/repos/activities';
+import { createActivity, updateActivity } from '../lib/repos/activities';
 import { colors, radius, spacing } from '../lib/theme';
 import { useSheetBottomPadding } from '../lib/safeArea';
-import { User } from '../lib/types';
+import { Activity, User } from '../lib/types';
 import { Button } from './Button';
 import { Input } from './Input';
 
 type Props = {
   visible: boolean;
   user: User;
+  /** Atividade a corrigir; sem ela, o modal cadastra uma nova. */
+  activity?: Activity | null;
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 };
@@ -35,7 +37,7 @@ const PRESETS: { name: string; icon: keyof typeof Ionicons.glyphMap; hasDistance
   { name: 'Funcional', icon: 'fitness-outline', hasDistance: false },
 ];
 
-export function ActivityEditorModal({ visible, user, onClose, onSaved }: Props) {
+export function ActivityEditorModal({ visible, user, activity, onClose, onSaved }: Props) {
   const sheetBottom = useSheetBottomPadding();
   const [name, setName] = useState('');
   const [presetIdx, setPresetIdx] = useState<number | null>(null);
@@ -49,14 +51,15 @@ export function ActivityEditorModal({ visible, user, onClose, onSaved }: Props) 
 
   useEffect(() => {
     if (!visible) return;
-    setName('');
-    setPresetIdx(null);
-    setDuration('');
-    setDistance('');
-    setKcal('');
-    setNotes('');
+    const idx = activity ? PRESETS.findIndex((p) => p.name === activity.name) : -1;
+    setName(activity?.name ?? '');
+    setPresetIdx(idx >= 0 ? idx : null);
+    setDuration(activity ? String(activity.duration_min) : '');
+    setDistance(activity?.distance_km != null ? String(activity.distance_km).replace('.', ',') : '');
+    setKcal(activity ? String(activity.kcal) : '');
+    setNotes(activity?.notes ?? '');
     setErrors({});
-  }, [visible]);
+  }, [visible, activity]);
 
   function pickPreset(idx: number) {
     setPresetIdx(idx);
@@ -83,7 +86,7 @@ export function ActivityEditorModal({ visible, user, onClose, onSaved }: Props) 
     try {
       const estimated = await deepseek.estimateActivityCalories(
         user,
-        name.trim(),
+        notes.trim() ? `${name.trim()} (${notes.trim()})` : name.trim(),
         dur,
         distVal
       );
@@ -91,8 +94,8 @@ export function ActivityEditorModal({ visible, user, onClose, onSaved }: Props) 
     } catch (e: any) {
       if (e?.code === 'NO_KEY') {
         Alert.alert(
-          'Chave DeepSeek não cadastrada',
-          'Vá em Perfil → Integrações pra cadastrar.'
+          'IA não configurada',
+          'Cadastre a chave do Gemini em Perfil → Integrações.'
         );
       } else {
         Alert.alert('IA', e?.message ?? 'Erro ao consultar a IA.');
@@ -115,14 +118,15 @@ export function ActivityEditorModal({ visible, user, onClose, onSaved }: Props) 
     const dist = Number(distance.replace(',', '.'));
     setSaving(true);
     try {
-      await createActivity({
-        user_id: user.id,
+      const dados = {
         name,
         duration_min: dur,
         distance_km: showDistance && dist > 0 ? dist : null,
         kcal: k,
         notes: notes.trim() || null,
-      });
+      };
+      if (activity) await updateActivity(activity.id, dados);
+      else await createActivity({ user_id: user.id, ...dados });
       await onSaved();
     } catch (err: any) {
       Alert.alert('Erro', err?.message ?? 'Falha ao salvar atividade.');
@@ -138,7 +142,7 @@ export function ActivityEditorModal({ visible, user, onClose, onSaved }: Props) 
         style={styles.backdrop}
       >
         <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
-          <Text style={styles.title}>Nova atividade</Text>
+          <Text style={styles.title}>{activity ? 'Editar atividade' : 'Nova atividade'}</Text>
           <ScrollView style={{ maxHeight: 520 }}>
             <Text style={styles.fieldLabel}>Tipo</Text>
             <View style={styles.presetGrid}>

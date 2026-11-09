@@ -29,6 +29,7 @@ import { escolherEImportar } from '../../lib/importData';
 import { ageFromBirth } from '../../lib/format';
 import { usePushToken } from '../../lib/push';
 import * as deepseek from '../../lib/ai/deepseek';
+import * as gemini from '../../lib/ai/gemini';
 import { updateUser } from '../../lib/repos/users';
 import { colors, radius, spacing } from '../../lib/theme';
 import { useSheetBottomPadding } from '../../lib/safeArea';
@@ -204,7 +205,7 @@ export default function ProfileScreen() {
         )}
       </Card>
 
-      <DeepSeekCard />
+      <IntegracoesCard />
 
       <PushTokenCard />
 
@@ -236,7 +237,50 @@ export default function ProfileScreen() {
   );
 }
 
-function DeepSeekCard() {
+type AiProvider = {
+  label: string;
+  helper: string;
+  modalTitle: string;
+  modalSub: string;
+  placeholder: string;
+  api: { hasApiKey(): Promise<boolean>; setApiKey(k: string): Promise<void>; clearApiKey(): Promise<void> };
+};
+
+const PROVEDORES: AiProvider[] = [
+  {
+    label: 'Gemini (IA)',
+    helper: 'Estima as calorias do cardio e da musculação.',
+    modalTitle: 'Chave do Gemini',
+    modalSub: 'Pegue em aistudio.google.com → Get API key. Começa com "AIza".',
+    placeholder: 'AIza...',
+    api: gemini,
+  },
+  {
+    label: 'DeepSeek (IA)',
+    helper: 'Estima calorias e macros de preparos pela descrição (e as calorias do treino, se o Gemini não estiver configurado).',
+    modalTitle: 'Chave DeepSeek',
+    modalSub: 'Pegue em platform.deepseek.com → API Keys. Começa com "sk-".',
+    placeholder: 'sk-...',
+    api: deepseek,
+  },
+];
+
+function IntegracoesCard() {
+  return (
+    <Card title="Integrações">
+      {PROVEDORES.map((p, i) => (
+        <View key={p.label} style={i > 0 ? { marginTop: spacing.lg } : undefined}>
+          <AiKeySection provider={p} />
+        </View>
+      ))}
+      <Text style={[styles.helperText, { marginTop: spacing.md }]}>
+        As chaves ficam só neste dispositivo (armazenamento seguro).
+      </Text>
+    </Card>
+  );
+}
+
+function AiKeySection({ provider }: { provider: AiProvider }) {
   const sheetBottom = useSheetBottomPadding();
   const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [open, setOpen] = useState(false);
@@ -244,7 +288,7 @@ function DeepSeekCard() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    deepseek.hasApiKey().then(setHasKey);
+    provider.api.hasApiKey().then(setHasKey);
   }, []);
 
   function openEditor() {
@@ -254,12 +298,12 @@ function DeepSeekCard() {
 
   async function save() {
     if (!value.trim()) {
-      Alert.alert('Cole sua chave DeepSeek antes de salvar.');
+      Alert.alert(`Cole a chave antes de salvar.`);
       return;
     }
     setSaving(true);
     try {
-      await deepseek.setApiKey(value);
+      await provider.api.setApiKey(value);
       setHasKey(true);
       setOpen(false);
     } finally {
@@ -274,7 +318,7 @@ function DeepSeekCard() {
         text: 'Remover',
         style: 'destructive',
         onPress: async () => {
-          await deepseek.clearApiKey();
+          await provider.api.clearApiKey();
           setHasKey(false);
         },
       },
@@ -282,16 +326,15 @@ function DeepSeekCard() {
   }
 
   return (
-    <Card title="Integrações">
+    <View>
       <View style={styles.row}>
-        <Text style={styles.rowLabel}>DeepSeek (IA)</Text>
+        <Text style={styles.rowLabel}>{provider.label}</Text>
         <Text style={[styles.rowValue, { color: hasKey ? colors.success : colors.textMuted }]}>
           {hasKey === null ? '…' : hasKey ? 'Configurada' : 'Não configurada'}
         </Text>
       </View>
       <Text style={styles.helperText}>
-        Usada pra estimar calorias e macros de preparos pela descrição. Sua chave fica só
-        neste dispositivo (armazenamento seguro).
+        {provider.helper}
       </Text>
       <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
         <Button
@@ -315,15 +358,15 @@ function DeepSeekCard() {
           style={styles.modalBackdrop}
         >
           <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
-            <Text style={styles.modalTitle}>Chave DeepSeek</Text>
+            <Text style={styles.modalTitle}>{provider.modalTitle}</Text>
             <Text style={styles.modalSub}>
-              Pegue em platform.deepseek.com → API Keys. Começa com "sk-".
+              {provider.modalSub}
             </Text>
             <Input
               label="API key"
               value={value}
               onChangeText={setValue}
-              placeholder="sk-..."
+              placeholder={provider.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry
@@ -340,7 +383,7 @@ function DeepSeekCard() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </Card>
+    </View>
   );
 }
 

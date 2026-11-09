@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { ageFromBirth } from '../format';
 import { Macros, User } from '../types';
+import * as gemini from './gemini';
 
 const KEY_STORE_NAME = 'fittracker_deepseek_api_key';
 const API_URL = 'https://api.deepseek.com/chat/completions';
@@ -132,6 +133,30 @@ async function callDeepSeek(systemPrompt: string, userPrompt: string): Promise<a
   }
 }
 
+/**
+ * Calorias de cardio/musculação: usa o Gemini quando a chave dele está cadastrada,
+ * senão cai no DeepSeek. Erros saem sempre como DeepSeekError (as telas já tratam).
+ */
+async function callCalorias(systemPrompt: string, userPrompt: string): Promise<any> {
+  if (await gemini.hasApiKey()) {
+    try {
+      return await gemini.callGemini(systemPrompt, userPrompt);
+    } catch (e) {
+      if (e instanceof gemini.GeminiError) throw new DeepSeekError(e.message, e.code);
+      throw e;
+    }
+  }
+  if (!(await hasApiKey())) {
+    throw new DeepSeekError('Cadastre a chave do Gemini em Perfil → Integrações.', 'NO_KEY');
+  }
+  return callDeepSeek(systemPrompt, userPrompt);
+}
+
+/** Há alguma IA configurada pra estimar calorias (Gemini ou DeepSeek)? */
+export async function hasCaloriesKey(): Promise<boolean> {
+  return (await gemini.hasApiKey()) || (await hasApiKey());
+}
+
 function parseMacros(parsed: any): Macros {
   const macros: Macros = {
     kcal: Number(parsed.kcal),
@@ -194,7 +219,7 @@ Praticante:
 
 Estime o gasto calórico total dessa sessão.`;
 
-  const parsed = await callDeepSeek(SYSTEM_PROMPT_ACTIVITY, prompt);
+  const parsed = await callCalorias(SYSTEM_PROMPT_ACTIVITY, prompt);
   const kcal = Math.round(Number(parsed.kcal));
   if (!Number.isFinite(kcal) || kcal < 0) {
     throw new DeepSeekError('A IA devolveu calorias inválidas.', 'INVALID_VALUES');
@@ -240,7 +265,7 @@ Praticante:
 
 Estime a duração típica dessa sessão (incluindo descanso entre séries) e o gasto calórico total.`;
 
-  const parsed = await callDeepSeek(SYSTEM_PROMPT_ACTIVITY, prompt);
+  const parsed = await callCalorias(SYSTEM_PROMPT_ACTIVITY, prompt);
   const kcal = Math.round(Number(parsed.kcal));
   if (!Number.isFinite(kcal) || kcal < 0) {
     throw new DeepSeekError('A IA devolveu calorias inválidas.', 'INVALID_VALUES');
