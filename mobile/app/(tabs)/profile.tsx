@@ -28,8 +28,8 @@ import { getToken } from '../../lib/entitlement';
 import { escolherEImportar } from '../../lib/importData';
 import { ageFromBirth } from '../../lib/format';
 import { usePushToken } from '../../lib/push';
-import * as deepseek from '../../lib/ai/deepseek';
-import * as gemini from '../../lib/ai/gemini';
+import * as ia from '../../lib/ai/providers';
+import { ProviderId, PROVIDERS, providerInfo } from '../../lib/ai/providers';
 import { updateUser } from '../../lib/repos/users';
 import { colors, radius, spacing } from '../../lib/theme';
 import { useSheetBottomPadding } from '../../lib/safeArea';
@@ -205,7 +205,7 @@ export default function ProfileScreen() {
         )}
       </Card>
 
-      <IntegracoesCard />
+      <IaCard />
 
       <PushTokenCard />
 
@@ -237,153 +237,166 @@ export default function ProfileScreen() {
   );
 }
 
-type AiProvider = {
-  label: string;
-  helper: string;
-  modalTitle: string;
-  modalSub: string;
-  placeholder: string;
-  api: { hasApiKey(): Promise<boolean>; setApiKey(k: string): Promise<void>; clearApiKey(): Promise<void> };
-};
+type IaEstado = { id: ProviderId; temChave: boolean; modelo: string | null };
 
-const PROVEDORES: AiProvider[] = [
-  {
-    label: 'Gemini (IA)',
-    helper: 'Estima as calorias do cardio e da musculação.',
-    modalTitle: 'Chave do Gemini',
-    modalSub: 'Pegue em aistudio.google.com → Get API key (começa com "AIza" ou "AQ.").',
-    placeholder: 'AIza... ou AQ....',
-    api: gemini,
-  },
-  {
-    label: 'DeepSeek (IA)',
-    helper: 'Estima calorias e macros de preparos pela descrição (e as calorias do treino, se o Gemini não estiver configurado).',
-    modalTitle: 'Chave DeepSeek',
-    modalSub: 'Pegue em platform.deepseek.com → API Keys. Começa com "sk-".',
-    placeholder: 'sk-...',
-    api: deepseek,
-  },
-];
-
-function IntegracoesCard() {
-  return (
-    <Card title="Integrações">
-      {PROVEDORES.map((p, i) => (
-        <View key={p.label} style={i > 0 ? { marginTop: spacing.lg } : undefined}>
-          <AiKeySection provider={p} />
-        </View>
-      ))}
-      <Text style={[styles.helperText, { marginTop: spacing.md }]}>
-        As chaves ficam só neste dispositivo (armazenamento seguro).
-      </Text>
-    </Card>
-  );
-}
-
-function AiKeySection({ provider }: { provider: AiProvider }) {
+/**
+ * Inteligência Artificial: chaves de Claude, ChatGPT, Gemini, Grok e DeepSeek; o usuário
+ * escolhe qual usar. Vale para macros de preparos e calorias de cardio/musculação.
+ */
+function IaCard() {
   const sheetBottom = useSheetBottomPadding();
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [estado, setEstado] = useState<IaEstado[] | null>(null);
+  const [ativo, setAtivo] = useState<ProviderId | null>(null);
+  const [editando, setEditando] = useState<ProviderId | null>(null);
+  const [chave, setChave] = useState('');
+  const [modelo, setModelo] = useState('');
+  const [salvando, setSalvando] = useState(false);
 
-  useEffect(() => {
-    provider.api.hasApiKey().then(setHasKey);
+  const carregar = useCallback(async () => {
+    const lista = await Promise.all(
+      PROVIDERS.map(async (p) => ({
+        id: p.id,
+        temChave: await ia.hasKey(p.id),
+        modelo: await ia.getCustomModel(p.id),
+      }))
+    );
+    setEstado(lista);
+    setAtivo(await ia.getActiveProvider());
   }, []);
 
-  function openEditor() {
-    setValue('');
-    setOpen(true);
+  useEffect(() => {
+    carregar();
+  }, [carregar]);
+
+  const infoDe = (id: ProviderId) => estado?.find((e) => e.id === id);
+
+  function abrirEditor(id: ProviderId) {
+    setChave('');
+    setModelo(infoDe(id)?.modelo ?? '');
+    setEditando(id);
   }
 
-  async function save() {
-    if (!value.trim()) {
-      Alert.alert(`Cole a chave antes de salvar.`);
+  async function escolher(id: ProviderId) {
+    if (!infoDe(id)?.temChave) {
+      abrirEditor(id); // sem chave: cadastra e já passa a usar
       return;
     }
-    setSaving(true);
+    await ia.setActiveProvider(id);
+    setAtivo(id);
+  }
+
+  async function salvar() {
+    if (!editando) return;
+    const tinha = infoDe(editando)?.temChave;
+    if (!chave.trim() && !tinha) {
+      Alert.alert('Cole a chave antes de salvar.');
+      return;
+    }
+    setSalvando(true);
     try {
-      await provider.api.setApiKey(value);
-      setHasKey(true);
-      setOpen(false);
+      if (chave.trim()) await ia.setKey(editando, chave);
+      await ia.setCustomModel(editando, modelo);
+      if (!tinha) await ia.setActiveProvider(editando); // primeira chave: já usa esta IA
+      setEditando(null);
+      await carregar();
     } finally {
-      setSaving(false);
+      setSalvando(false);
     }
   }
 
-  function confirmRemove() {
-    Alert.alert('Remover chave', 'A IA vai parar de funcionar até cadastrar outra.', [
+  function remover(id: ProviderId) {
+    Alert.alert('Remover chave', `Apagar a chave do ${providerInfo(id).label} deste aparelho?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Remover',
         style: 'destructive',
         onPress: async () => {
-          await provider.api.clearApiKey();
-          setHasKey(false);
+          await ia.clearKey(id);
+          setEditando(null);
+          await carregar();
         },
       },
     ]);
   }
 
-  return (
-    <View>
-      <View style={styles.row}>
-        <Text style={styles.rowLabel}>{provider.label}</Text>
-        <Text style={[styles.rowValue, { color: hasKey ? colors.success : colors.textMuted }]}>
-          {hasKey === null ? '…' : hasKey ? 'Configurada' : 'Não configurada'}
-        </Text>
-      </View>
-      <Text style={styles.helperText}>
-        {provider.helper}
-      </Text>
-      <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-        <Button
-          title={hasKey ? 'Trocar chave' : 'Cadastrar chave'}
-          onPress={openEditor}
-          style={{ flex: 1 }}
-        />
-        {hasKey && (
-          <Button
-            title="Remover"
-            variant="secondary"
-            onPress={confirmRemove}
-            style={{ flex: 1 }}
-          />
-        )}
-      </View>
+  const ed = editando ? providerInfo(editando) : null;
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
+  return (
+    <Card title="Inteligência Artificial">
+      <Text style={styles.helperText}>
+        Escolha qual IA estima os macros dos preparos e as calorias do cardio e da musculação.
+        As chaves ficam só neste aparelho (armazenamento seguro).
+      </Text>
+      {PROVIDERS.map((p) => {
+        const e = infoDe(p.id);
+        const selecionado = ativo === p.id;
+        return (
+          <View key={p.id} style={styles.iaRow}>
+            <Pressable style={styles.iaMain} onPress={() => escolher(p.id)} hitSlop={4}>
+              <Ionicons
+                name={selecionado ? 'radio-button-on' : 'radio-button-off'}
+                size={22}
+                color={selecionado ? colors.primary : colors.textMuted}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.iaLabel}>{p.label}</Text>
+                <Text style={[styles.iaSub, e?.temChave && { color: colors.success }]}>
+                  {e === undefined
+                    ? '…'
+                    : e.temChave
+                      ? `Chave cadastrada · ${e.modelo || p.defaultModel}`
+                      : 'Sem chave'}
+                </Text>
+              </View>
+            </Pressable>
+            <Pressable onPress={() => abrirEditor(p.id)} hitSlop={8} style={styles.iaKeyBtn}>
+              <Ionicons name="key-outline" size={19} color={colors.textMuted} />
+            </Pressable>
+          </View>
+        );
+      })}
+
+      <Modal visible={ed != null} animationType="slide" transparent onRequestClose={() => setEditando(null)}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalBackdrop}
         >
           <View style={[styles.modal, { paddingBottom: sheetBottom }]}>
-            <Text style={styles.modalTitle}>{provider.modalTitle}</Text>
-            <Text style={styles.modalSub}>
-              {provider.modalSub}
-            </Text>
+            <Text style={styles.modalTitle}>{ed?.label}</Text>
+            <Text style={styles.modalSub}>Pegue em {ed?.keyHint}</Text>
             <Input
-              label="API key"
-              value={value}
-              onChangeText={setValue}
-              placeholder={provider.placeholder}
+              label={editando && infoDe(editando)?.temChave ? 'Nova chave (vazio = manter a atual)' : 'Chave da API'}
+              value={chave}
+              onChangeText={setChave}
+              placeholder={ed?.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry
             />
+            <Input
+              label="Modelo (opcional)"
+              value={modelo}
+              onChangeText={setModelo}
+              placeholder={ed?.defaultModel}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
             <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-              <Button
-                title="Cancelar"
-                variant="secondary"
-                onPress={() => setOpen(false)}
-                style={{ flex: 1 }}
-              />
-              <Button title="Salvar" onPress={save} loading={saving} style={{ flex: 1 }} />
+              <Button title="Cancelar" variant="secondary" onPress={() => setEditando(null)} style={{ flex: 1 }} />
+              <Button title="Salvar" onPress={salvar} loading={salvando} style={{ flex: 1 }} />
             </View>
+            {editando && infoDe(editando)?.temChave && (
+              <Button
+                title="Remover chave"
+                variant="ghost"
+                onPress={() => remover(editando)}
+                style={{ marginTop: spacing.sm }}
+              />
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </Card>
   );
 }
 
@@ -572,6 +585,15 @@ function MenuRow({
 }
 
 const styles = StyleSheet.create({
+  iaRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border,
+    paddingVertical: spacing.sm, marginTop: spacing.xs,
+  },
+  iaMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  iaLabel: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  iaSub: { color: colors.textMuted, fontSize: 12, marginTop: 1 },
+  iaKeyBtn: { padding: 6, marginLeft: spacing.sm },
   scroll: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md },
   header: { alignItems: 'center', marginVertical: spacing.lg },

@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import * as deepseek from '../lib/ai/deepseek';
+import * as ia from '../lib/ai/estimates';
 import { createFood, updateFood } from '../lib/repos/foods';
 import { colors, radius, spacing } from '../lib/theme';
 import { useSheetBottomPadding } from '../lib/safeArea';
@@ -95,8 +95,8 @@ export function PreparoEditorModal({
     setAiLoading(true);
     try {
       const m = isLiquid
-        ? await deepseek.estimateLiquidPer100ml(description)
-        : await deepseek.estimatePreparoPer100g(description);
+        ? await ia.estimateLiquidPer100ml(description)
+        : await ia.estimatePreparoPer100g(description);
       setKcal(toStr(m.kcal));
       setProtein(toStr(m.protein_g));
       setCarbs(toStr(m.carbs_g));
@@ -104,7 +104,7 @@ export function PreparoEditorModal({
       setFiber(toStr(m.fiber_g));
     } catch (e: any) {
       if (e?.code === 'NO_KEY') {
-        Alert.alert('Chave DeepSeek não cadastrada', 'Vá em Perfil → Integrações pra cadastrar.');
+        Alert.alert('IA não configurada', 'Cadastre uma chave em Perfil → Inteligência Artificial.');
       } else {
         Alert.alert('IA', e?.message ?? 'Erro ao consultar a IA.');
       }

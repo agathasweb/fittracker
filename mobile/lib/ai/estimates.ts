@@ -1,37 +1,12 @@
-import * as SecureStore from 'expo-secure-store';
 import { ageFromBirth } from '../format';
 import { Macros, User } from '../types';
-import * as gemini from './gemini';
+import { AiError, callAI, hasAIKey } from './providers';
 
-const KEY_STORE_NAME = 'fittracker_deepseek_api_key';
-const API_URL = 'https://api.deepseek.com/chat/completions';
-const MODEL = 'deepseek-chat';
-
-export async function getApiKey(): Promise<string | null> {
-  try {
-    return await SecureStore.getItemAsync(KEY_STORE_NAME);
-  } catch {
-    return null;
-  }
-}
-
-export async function setApiKey(key: string): Promise<void> {
-  await SecureStore.setItemAsync(KEY_STORE_NAME, key.trim());
-}
-
-export async function clearApiKey(): Promise<void> {
-  await SecureStore.deleteItemAsync(KEY_STORE_NAME);
-}
-
-export async function hasApiKey(): Promise<boolean> {
-  return !!(await getApiKey());
-}
-
-export class DeepSeekError extends Error {
-  constructor(message: string, public code?: string) {
-    super(message);
-  }
-}
+/**
+ * Estimativas por IA (macros de preparos/bebidas, calorias de cardio e musculação).
+ * O provedor (Claude, ChatGPT, Gemini, Grok ou DeepSeek) é o escolhido no Perfil.
+ */
+export { AiError, hasAIKey };
 
 const SYSTEM_PROMPT_PER_100G = `Você é um nutricionista que estima macros de preparações alimentares brasileiras.
 Retorne SEMPRE um JSON único, sem markdown nem texto extra, com este formato exato:
@@ -67,96 +42,6 @@ Regras:
 - O número deve ser inteiro razoável (sem decimal).
 - Não inclua comentários, unidades textuais ou campos extras — só o campo "kcal".`;
 
-async function callDeepSeek(systemPrompt: string, userPrompt: string): Promise<any> {
-  const key = await getApiKey();
-  if (!key) {
-    throw new DeepSeekError(
-      'Chave DeepSeek não cadastrada. Adicione no perfil.',
-      'NO_KEY'
-    );
-  }
-  const trimmed = userPrompt.trim();
-  if (!trimmed) {
-    throw new DeepSeekError('Descreva antes de pedir a estimativa.', 'EMPTY');
-  }
-
-  let res: Response;
-  try {
-    res = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: trimmed },
-        ],
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-      }),
-    });
-  } catch {
-    throw new DeepSeekError(
-      'Falha de rede ao consultar a IA. Verifique sua conexão.',
-      'NETWORK'
-    );
-  }
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    if (res.status === 401 || res.status === 403) {
-      throw new DeepSeekError('Chave DeepSeek inválida.', 'INVALID_KEY');
-    }
-    if (res.status === 429) {
-      throw new DeepSeekError('Limite de uso atingido na DeepSeek.', 'RATE_LIMIT');
-    }
-    throw new DeepSeekError(`Erro da IA (${res.status}): ${body.slice(0, 200)}`, 'HTTP');
-  }
-
-  let data: any;
-  try {
-    data = await res.json();
-  } catch {
-    throw new DeepSeekError('Resposta inválida da IA.', 'BAD_JSON');
-  }
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string') {
-    throw new DeepSeekError('Resposta inesperada da IA.', 'BAD_SHAPE');
-  }
-  try {
-    return JSON.parse(content);
-  } catch {
-    throw new DeepSeekError('A IA não devolveu JSON válido.', 'PARSE');
-  }
-}
-
-/**
- * Calorias de cardio/musculação: usa o Gemini quando a chave dele está cadastrada,
- * senão cai no DeepSeek. Erros saem sempre como DeepSeekError (as telas já tratam).
- */
-async function callCalorias(systemPrompt: string, userPrompt: string): Promise<any> {
-  if (await gemini.hasApiKey()) {
-    try {
-      return await gemini.callGemini(systemPrompt, userPrompt);
-    } catch (e) {
-      if (e instanceof gemini.GeminiError) throw new DeepSeekError(e.message, e.code);
-      throw e;
-    }
-  }
-  if (!(await hasApiKey())) {
-    throw new DeepSeekError('Cadastre a chave do Gemini em Perfil → Integrações.', 'NO_KEY');
-  }
-  return callDeepSeek(systemPrompt, userPrompt);
-}
-
-/** Há alguma IA configurada pra estimar calorias (Gemini ou DeepSeek)? */
-export async function hasCaloriesKey(): Promise<boolean> {
-  return (await gemini.hasApiKey()) || (await hasApiKey());
-}
-
 function parseMacros(parsed: any): Macros {
   const macros: Macros = {
     kcal: Number(parsed.kcal),
@@ -167,7 +52,7 @@ function parseMacros(parsed: any): Macros {
   };
   for (const k of ['kcal', 'protein_g', 'carbs_g', 'fat_g'] as const) {
     if (!Number.isFinite(macros[k]) || macros[k] < 0) {
-      throw new DeepSeekError('A IA devolveu valores inválidos.', 'INVALID_VALUES');
+      throw new AiError('A IA devolveu valores inválidos.', 'INVALID_VALUES');
     }
   }
   if (macros.fiber_g !== null && (!Number.isFinite(macros.fiber_g) || macros.fiber_g < 0)) {
@@ -182,7 +67,7 @@ function parseMacros(parsed: any): Macros {
  * Retorna kcal/100g e macros/100g, prontos pra armazenar como um preparo (food) no banco.
  */
 export async function estimatePreparoPer100g(description: string): Promise<Macros> {
-  const parsed = await callDeepSeek(SYSTEM_PROMPT_PER_100G, description);
+  const parsed = await callAI(SYSTEM_PROMPT_PER_100G, description);
   return parseMacros(parsed);
 }
 
@@ -191,7 +76,7 @@ export async function estimatePreparoPer100g(description: string): Promise<Macro
  * Mesmo formato do per100g — o que muda é o prompt e a unidade implícita.
  */
 export async function estimateLiquidPer100ml(description: string): Promise<Macros> {
-  const parsed = await callDeepSeek(SYSTEM_PROMPT_PER_100ML, description);
+  const parsed = await callAI(SYSTEM_PROMPT_PER_100ML, description);
   return parseMacros(parsed);
 }
 
@@ -219,10 +104,10 @@ Praticante:
 
 Estime o gasto calórico total dessa sessão.`;
 
-  const parsed = await callCalorias(SYSTEM_PROMPT_ACTIVITY, prompt);
+  const parsed = await callAI(SYSTEM_PROMPT_ACTIVITY, prompt);
   const kcal = Math.round(Number(parsed.kcal));
   if (!Number.isFinite(kcal) || kcal < 0) {
-    throw new DeepSeekError('A IA devolveu calorias inválidas.', 'INVALID_VALUES');
+    throw new AiError('A IA devolveu calorias inválidas.', 'INVALID_VALUES');
   }
   return kcal;
 }
@@ -239,7 +124,7 @@ export async function estimateWorkoutCalories(
 ): Promise<number> {
   const feitos = summary.exercises.filter((e) => e.sets > 0);
   if (feitos.length === 0) {
-    throw new DeepSeekError('Nenhuma série concluída para estimar.', 'INVALID_VALUES');
+    throw new AiError('Nenhuma série concluída para estimar.', 'INVALID_VALUES');
   }
 
   const sexLabel = user.sex === 'M' ? 'masculino' : user.sex === 'F' ? 'feminino' : 'outro';
@@ -265,10 +150,10 @@ Praticante:
 
 Estime a duração típica dessa sessão (incluindo descanso entre séries) e o gasto calórico total.`;
 
-  const parsed = await callCalorias(SYSTEM_PROMPT_ACTIVITY, prompt);
+  const parsed = await callAI(SYSTEM_PROMPT_ACTIVITY, prompt);
   const kcal = Math.round(Number(parsed.kcal));
   if (!Number.isFinite(kcal) || kcal < 0) {
-    throw new DeepSeekError('A IA devolveu calorias inválidas.', 'INVALID_VALUES');
+    throw new AiError('A IA devolveu calorias inválidas.', 'INVALID_VALUES');
   }
   return kcal;
 }

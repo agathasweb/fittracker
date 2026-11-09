@@ -18,7 +18,7 @@ import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
 import { MuscleButton } from '../../components/MuscleMap';
 import { useAuth } from '../../lib/auth';
-import { DeepSeekError, estimateWorkoutCalories, hasCaloriesKey } from '../../lib/ai/deepseek';
+import { AiError, estimateWorkoutCalories, hasAIKey } from '../../lib/ai/estimates';
 import {
   addExerciseToSession,
   addSetToExercise,
@@ -225,10 +225,10 @@ export default function WorkoutSessionScreen() {
       return;
     }
 
-    if (!(await hasCaloriesKey())) {
+    if (!(await hasAIKey())) {
       Alert.alert(
         'Estimar calorias',
-        'Para estimar o gasto calórico da musculação com IA, cadastre a chave do Gemini em Perfil → Integrações. O treino foi salvo mesmo assim.',
+        'Para estimar o gasto calórico da musculação com IA, cadastre uma chave em Perfil → Inteligência Artificial. O treino foi salvo mesmo assim.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
       return;
@@ -242,7 +242,7 @@ export default function WorkoutSessionScreen() {
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e) {
-      const msg = e instanceof DeepSeekError ? e.message : 'Não foi possível estimar as calorias agora.';
+      const msg = e instanceof AiError ? e.message : 'Não foi possível estimar as calorias agora.';
       Alert.alert('Treino salvo', `${msg} O treino foi salvo mesmo assim.`, [
         { text: 'OK', onPress: () => router.back() },
       ]);

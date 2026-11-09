@@ -11,7 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import * as deepseek from '../lib/ai/deepseek';
+import * as ia from '../lib/ai/estimates';
 import { createActivity, updateActivity } from '../lib/repos/activities';
 import { colors, radius, spacing } from '../lib/theme';
 import { useSheetBottomPadding } from '../lib/safeArea';
@@ -84,7 +84,7 @@ export function ActivityEditorModal({ visible, user, activity, onClose, onSaved 
 
     setAiLoading(true);
     try {
-      const estimated = await deepseek.estimateActivityCalories(
+      const estimated = await ia.estimateActivityCalories(
         user,
         notes.trim() ? `${name.trim()} (${notes.trim()})` : name.trim(),
         dur,
@@ -95,7 +95,7 @@ export function ActivityEditorModal({ visible, user, activity, onClose, onSaved 
       if (e?.code === 'NO_KEY') {
         Alert.alert(
           'IA não configurada',
-          'Cadastre a chave do Gemini em Perfil → Integrações.'
+          'Cadastre uma chave em Perfil → Inteligência Artificial.'
         );
       } else {
         Alert.alert('IA', e?.message ?? 'Erro ao consultar a IA.');
