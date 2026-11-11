@@ -18,7 +18,8 @@ import {
   listDeviceProfileIds,
   setOwnerId,
 } from './profiles';
-import { createUser, getUserByEmail, getUserById, NewUser } from './repos/users';
+import { ageFromBirth } from './format';
+import { createUser, getUserByEmail, getUserById, NewUser, updateUser } from './repos/users';
 import { User } from './types';
 
 /**
@@ -141,7 +142,12 @@ export async function adicionarPerfil(
     if (existente.id === ownerId) throw new Error('Esse e-mail é o do perfil principal.');
     throw new Error('Já existe um perfil com esse e-mail neste aparelho.');
   }
-  const user = await createUser({ ...dados, email, password_hash: SENHA_NO_SERVIDOR });
+  const criado = await createUser({ ...dados, email, password_hash: SENHA_NO_SERVIDOR });
+  // O padrão da coluna (180 g) é a meta de um adulto treinando pesado. Perfil novo calcula pelo
+  // peso: 1,6 g/kg pra adulto (Morton 2018), 1,2 g/kg pra menor de 18 (crescimento, sem exagero).
+  const gPorKg = ageFromBirth(dados.birth_date) < 18 ? 1.2 : 1.6;
+  await updateUser(criado.id, { daily_protein_goal_g: Math.round(dados.current_weight_kg * gPorKg) });
+  const user = (await getUserById(criado.id)) ?? criado;
   await addExtraProfile(ownerId, user.id);
   await AsyncStorage.setItem(SESSION_KEY, String(user.id));
   notify('profile');
