@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiLogin, apiLogout } from './api';
 import {
   clearToken,
@@ -9,6 +9,15 @@ import {
   setToken,
   verificarEntitlement,
 } from './entitlement';
+import {
+  addExtraProfile,
+  clearOwnerId,
+  deleteExtraProfile,
+  emailLocalDoPerfil,
+  getOwnerId,
+  listDeviceProfileIds,
+  setOwnerId,
+} from './profiles';
 import { createUser, getUserByEmail, getUserById, NewUser } from './repos/users';
 import { User } from './types';
 
@@ -33,9 +42,14 @@ const PENDING_KEY = '@fittracker/pending_profile';
  */
 const SENHA_NO_SERVIDOR = 'server-authenticated';
 
-const listeners = new Set<() => void>();
-function notify() {
-  listeners.forEach((cb) => cb());
+/**
+ * 'full' revalida a assinatura (login, logout, perfil novo). 'profile' só relê o
+ * usuário ativo: trocar de perfil não pode custar uma ida ao servidor por tela montada.
+ */
+type NotifyKind = 'full' | 'profile';
+const listeners = new Set<(kind: NotifyKind) => void>();
+function notify(kind: NotifyKind = 'full') {
+  listeners.forEach((cb) => cb(kind));
 }
 
 export type PendingProfile = { email: string; name: string };
@@ -58,6 +72,7 @@ export async function login(email: string, password: string): Promise<LoginResul
   const local = await getUserByEmail(user.email);
   if (local) {
     await AsyncStorage.setItem(SESSION_KEY, String(local.id));
+    await setOwnerId(local.id);
     notify();
     return { kind: 'authed' };
   }
@@ -89,6 +104,7 @@ export async function adotarPerfilLocal(email: string): Promise<boolean> {
   if (!local) return false;
 
   await AsyncStorage.setItem(SESSION_KEY, String(local.id));
+  await setOwnerId(local.id);
   await AsyncStorage.removeItem(PENDING_KEY);
   notify();
   return true;
@@ -103,9 +119,44 @@ export async function completarPerfil(
     existente ?? (await createUser({ ...dados, password_hash: SENHA_NO_SERVIDOR }));
 
   await AsyncStorage.setItem(SESSION_KEY, String(user.id));
+  await setOwnerId(user.id);
   await AsyncStorage.removeItem(PENDING_KEY);
   notify();
   return user;
+}
+
+/**
+ * Cria um perfil extra debaixo da conta logada (ex.: a filha sem celular) e já
+ * troca pra ele. Sem e-mail, ganha um endereço local; com e-mail de alguém que já
+ * tem plano de treino no seed, o seed reconhece a pessoa.
+ */
+export async function adicionarPerfil(
+  dados: Omit<NewUser, 'password_hash' | 'email'> & { email?: string | null }
+): Promise<User> {
+  const ownerId = await getOwnerUserId();
+  if (!ownerId) throw new Error('Entre na sua conta antes de adicionar perfis.');
+  const email = dados.email?.trim().toLowerCase() || emailLocalDoPerfil();
+  const existente = await getUserByEmail(email);
+  if (existente) {
+    if (existente.id === ownerId) throw new Error('Esse e-mail é o do perfil principal.');
+    throw new Error('Já existe um perfil com esse e-mail neste aparelho.');
+  }
+  const user = await createUser({ ...dados, email, password_hash: SENHA_NO_SERVIDOR });
+  await addExtraProfile(ownerId, user.id);
+  await AsyncStorage.setItem(SESSION_KEY, String(user.id));
+  notify('profile');
+  return user;
+}
+
+/** Remove um perfil extra e todos os dados dele; volta pro principal se era o ativo. */
+export async function removerPerfil(userId: number): Promise<void> {
+  const ownerId = await getOwnerUserId();
+  if (!ownerId) return;
+  await deleteExtraProfile(ownerId, userId);
+  if ((await getCurrentUserId()) === userId) {
+    await AsyncStorage.setItem(SESSION_KEY, String(ownerId));
+  }
+  notify('profile');
 }
 
 export async function logout(): Promise<void> {
@@ -115,7 +166,29 @@ export async function logout(): Promise<void> {
   await limparEntitlement();
   await AsyncStorage.removeItem(SESSION_KEY);
   await AsyncStorage.removeItem(PENDING_KEY);
+  await clearOwnerId();
   notify();
+}
+
+/**
+ * Perfil principal (o da conta logada). Instalações anteriores ao multi-perfil não
+ * gravavam o dono: nelas a sessão sempre apontou pro próprio dono, então ela vira o dono.
+ */
+export async function getOwnerUserId(): Promise<number | null> {
+  const owner = await getOwnerId();
+  if (owner) return owner;
+  const atual = await getCurrentUserId();
+  if (atual) await setOwnerId(atual);
+  return atual;
+}
+
+/** Troca o perfil ativo (1 toque no topo). Só aceita perfis deste aparelho/conta. */
+export async function switchProfile(userId: number): Promise<void> {
+  await getOwnerUserId();
+  const ids = await listDeviceProfileIds();
+  if (!ids.includes(userId)) throw new Error('Perfil não encontrado neste aparelho.');
+  await AsyncStorage.setItem(SESSION_KEY, String(userId));
+  notify('profile');
 }
 
 export async function getCurrentUserId(): Promise<number | null> {
@@ -139,6 +212,7 @@ export type AuthState =
 
 export function useAuth(): AuthState & { reload: () => Promise<void> } {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
+  const offlineRef = useRef(false);
 
   const reload = useCallback(async () => {
     try {
@@ -169,6 +243,7 @@ export function useAuth(): AuthState & { reload: () => Promise<void> } {
         return;
       }
 
+      offlineRef.current = resultado.status === 'ok_offline';
       setState({ status: 'authed', user, offline: resultado.status === 'ok_offline' });
     } catch (e) {
       console.error('useAuth reload failed:', e);
@@ -178,8 +253,16 @@ export function useAuth(): AuthState & { reload: () => Promise<void> } {
 
   useEffect(() => {
     reload();
-    const cb = () => {
-      reload();
+    const cb = async (kind: NotifyKind) => {
+      if (kind === 'full') {
+        reload();
+        return;
+      }
+      // Troca de perfil: a assinatura (da conta) não mudou, só o usuário ativo.
+      const user = await getCurrentUser().catch(() => null);
+      setState((atual) =>
+        atual.status === 'authed' && user ? { status: 'authed', user, offline: offlineRef.current } : atual
+      );
     };
     listeners.add(cb);
     return () => {

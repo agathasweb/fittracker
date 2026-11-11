@@ -227,6 +227,11 @@ export default function ProfileScreen() {
 
       <Card title="Conta">
         <MenuRow
+          icon="people-outline"
+          text="Perfis neste aparelho"
+          onPress={() => router.push('/profiles')}
+        />
+        <MenuRow
           icon="key-outline"
           text="Trocar senha"
           onPress={() => router.push('/change-password')}

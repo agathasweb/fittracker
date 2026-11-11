@@ -9,6 +9,9 @@ import { useRequireAuth } from '../../lib/guards';
 import { registerForPushNotificationsAsync } from '../../lib/push';
 import { syncMedicationAlarms } from '../../lib/alarms';
 import { disconnectWatch } from '../../lib/watch';
+import { ProfileSwitcher } from '../../components/ProfileSwitcher';
+import { getOwnerUserId } from '../../lib/auth';
+import { getUserById } from '../../lib/repos/users';
 
 export default function TabsLayout() {
   const auth = useRequireAuth();
@@ -19,16 +22,21 @@ export default function TabsLayout() {
   // que o usuário está autenticado. Idempotente e silencioso em falha.
   const authedUser = auth.status === 'authed' ? auth.user : null;
   useEffect(() => {
-    if (authedUser) {
+    if (!authedUser) return;
+    (async () => {
+      // O aparelho pertence à conta logada (o dono), não ao perfil que está ativo:
+      // trocar pro perfil da Julia não pode re-registrar o celular no nome dela.
+      const ownerId = (await getOwnerUserId()) ?? authedUser.id;
+      const owner = ownerId === authedUser.id ? authedUser : (await getUserById(ownerId)) ?? authedUser;
       registerForPushNotificationsAsync({
-        userName: authedUser.name,
-        userEmail: authedUser.email,
+        userName: owner.name,
+        userEmail: owner.email,
       });
-      // Migra lembretes antigos pro alarme nativo e reagenda (idempotente).
+      // Migra lembretes antigos pro alarme nativo e reagenda os de TODOS os perfis (idempotente).
       syncMedicationAlarms(authedUser.id).catch(() => {});
       // Relógio removido do app: garante que a sync/mensagens nativas fiquem desligadas.
-      disconnectWatch(authedUser.id);
-    }
+      disconnectWatch(owner.id);
+    })().catch(() => {});
   }, [authedUser?.id]);
 
   if (auth.status !== 'authed') {
@@ -56,6 +64,7 @@ export default function TabsLayout() {
           headerTintColor: colors.text,
           // O SafeAreaView acima já recua o topo; sem isto o header somava a barra de status de novo.
           headerStatusBarHeight: 0,
+          headerRight: () => <ProfileSwitcher current={auth.user} />,
         }}
       >
         <Tabs.Screen

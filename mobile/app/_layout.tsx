@@ -37,6 +37,7 @@ function RootStack() {
       <Stack.Screen name="exam/[id]" options={{ title: 'Exame' }} />
       <Stack.Screen name="exam-markers" options={{ title: 'Evolução dos exames' }} />
       <Stack.Screen name="change-password" options={{ title: 'Trocar senha' }} />
+      <Stack.Screen name="profiles" options={{ title: 'Perfis' }} />
       <Stack.Screen name="workout-session/[id]" options={{ title: 'Treino' }} />
       <Stack.Screen name="workout-template/[id]" options={{ title: 'Treino' }} />
       <Stack.Screen name="workout-history" options={{ title: 'Histórico' }} />
