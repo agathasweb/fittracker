@@ -5,14 +5,11 @@ import { Logo } from '../components/Logo';
 import { useAuth } from '../lib/auth';
 import { backupDiarioSeNecessario } from '../lib/backup';
 import { colors, spacing } from '../lib/theme';
-import { checkForOTAUpdate } from '../lib/updates';
 
 export default function Index() {
   const auth = useAuth();
 
-  useEffect(() => {
-    checkForOTAUpdate();
-  }, []);
+  // A busca de atualização (OTA) mora no OtaBanner das abas: checa ao abrir e ao voltar para a frente.
 
   // Backup diário, silencioso. Só roda com sessão válida e nunca atrapalha o uso:
   // sem rede ou fora do piloto, apenas não acontece.

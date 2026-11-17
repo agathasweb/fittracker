@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UpdateBanner } from '../../components/UpdateBanner';
+import { OtaBanner } from '../../components/OtaBanner';
 import { colors } from '../../lib/theme';
 import { useRequireAuth } from '../../lib/guards';
 import { registerForPushNotificationsAsync } from '../../lib/push';
@@ -49,6 +50,7 @@ export default function TabsLayout() {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <UpdateBanner />
+      <OtaBanner />
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: colors.primary,
