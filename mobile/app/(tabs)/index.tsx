@@ -190,13 +190,15 @@ export default function HojeScreen() {
                 key={s.id}
                 onPress={(e) => {
                   e.stopPropagation();
-                  logProtein(s);
+                  // Carne (gramas) e whey (dosadores) pedem a quantidade na tela de Proteína.
+                  if (s.mode !== 'porcao') router.push({ pathname: '/protein', params: { lancar: String(s.id) } });
+                  else logProtein(s);
                 }}
                 style={styles.bottleChip}
               >
                 <Ionicons name="add" size={16} color={colors.bg} />
                 <Text style={styles.bottleChipText}>
-                  {s.name} · {Math.round(s.protein_g)}g
+                  {s.mode === 'porcao' ? `${s.name} · ${Math.round(s.protein_g)}g` : s.name}
                 </Text>
               </Pressable>
             ))}

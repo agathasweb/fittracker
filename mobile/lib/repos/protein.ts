@@ -1,18 +1,24 @@
 import { getDb } from '../db';
 import { nowISO } from '../format';
-import { ProteinEntry, ProteinSource } from '../types';
+import { ProteinEntry, ProteinMode, ProteinSource } from '../types';
 
 /**
- * Fontes iniciais — tabela do protocolo do médico (ovo 6 g; bife 30–40 g/100 g; whey 30 g;
- * YoPro/iogurte proteico 15–25 g; Hidro Protein 20 g). Faixas viram o valor do meio;
- * o usuário ajusta pelo rótulo na tela de Proteína.
+ * Fontes iniciais. Carnes: gramas de proteína por 100 g da carne PRONTA (cozida, grelhada ou
+ * assada), médias da tabela TACO (Unicamp) — bovina: patinho/contrafilé 36, alcatra 32, acém e
+ * moída 27; suína: lombo 36, pernil 32, bisteca 29; frango: peito 32, sobrecoxa 29, coxa 27;
+ * peixe: merluza 27, salmão 26, tilápia 26. Whey do Gutto (rótulo, 17/11/2026): 30 g
+ * (2 dosadores) = 21 g de proteína, ou 10,5 g por dosador. Ovo/YoPro/Hidro Protein seguem a
+ * tabela do médico. Tudo editável na tela de Proteína.
  */
-const DEFAULT_SOURCES: { name: string; portion: string; protein_g: number }[] = [
-  { name: 'Ovo', portion: '1 unidade', protein_g: 6 },
-  { name: 'Carne', portion: '100 g (bife)', protein_g: 35 },
-  { name: 'Whey', portion: '1 dose', protein_g: 30 },
-  { name: 'YoPro', portion: '1 unidade', protein_g: 20 },
-  { name: 'Hidro Protein', portion: '1 unidade', protein_g: 20 },
+const DEFAULT_SOURCES: { name: string; portion: string; protein_g: number; mode: ProteinMode }[] = [
+  { name: 'Ovo', portion: '1 unidade', protein_g: 6, mode: 'porcao' },
+  { name: 'Carne bovina', portion: '100 g (pronta)', protein_g: 32, mode: 'gramas' },
+  { name: 'Carne suína', portion: '100 g (pronta)', protein_g: 30, mode: 'gramas' },
+  { name: 'Frango', portion: '100 g (pronto)', protein_g: 31, mode: 'gramas' },
+  { name: 'Peixe', portion: '100 g (pronto)', protein_g: 26, mode: 'gramas' },
+  { name: 'Whey', portion: '1 dosador (15 g)', protein_g: 10.5, mode: 'unidades' },
+  { name: 'YoPro', portion: '1 unidade', protein_g: 20, mode: 'porcao' },
+  { name: 'Hidro Protein', portion: '1 unidade', protein_g: 20, mode: 'porcao' },
 ];
 
 /**
@@ -20,8 +26,6 @@ const DEFAULT_SOURCES: { name: string; portion: string; protein_g: number }[] = 
  * continuam exatamente como semeadas (nome + gramas antigas) — editadas pelo usuário ficam.
  */
 const CORRECOES_V1: { name: string; de: number; para: number; portion: string }[] = [
-  { name: 'Carne', de: 26, para: 35, portion: '100 g (bife)' },
-  { name: 'Whey', de: 24, para: 30, portion: '1 dose' },
   { name: 'YoPro', de: 15, para: 20, portion: '1 unidade' },
   { name: 'Hidro Protein', de: 15, para: 20, portion: '1 unidade' },
 ];
@@ -61,13 +65,14 @@ export async function listSources(userId: number): Promise<ProteinSource[]> {
   await db.withTransactionAsync(async () => {
     for (const [i, s] of DEFAULT_SOURCES.entries()) {
       await db.runAsync(
-        `INSERT INTO protein_sources (user_id, name, portion, protein_g, sort_order)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO protein_sources (user_id, name, portion, protein_g, sort_order, mode)
+         VALUES (?, ?, ?, ?, ?, ?)`,
         userId,
         s.name,
         s.portion,
         s.protein_g,
-        i
+        i,
+        s.mode
       );
     }
   });
@@ -81,7 +86,8 @@ export async function createSource(
   userId: number,
   name: string,
   portion: string,
-  proteinG: number
+  proteinG: number,
+  mode: ProteinMode = 'porcao'
 ): Promise<void> {
   const db = await getDb();
   const r = await db.getFirstAsync<{ m: number | null }>(
@@ -89,13 +95,14 @@ export async function createSource(
     userId
   );
   await db.runAsync(
-    `INSERT INTO protein_sources (user_id, name, portion, protein_g, sort_order)
-     VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO protein_sources (user_id, name, portion, protein_g, sort_order, mode)
+     VALUES (?, ?, ?, ?, ?, ?)`,
     userId,
     name.trim(),
     portion.trim(),
     proteinG,
-    (r?.m ?? -1) + 1
+    (r?.m ?? -1) + 1,
+    mode
   );
 }
 
@@ -103,14 +110,16 @@ export async function updateSource(
   id: number,
   name: string,
   portion: string,
-  proteinG: number
+  proteinG: number,
+  mode: ProteinMode = 'porcao'
 ): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    'UPDATE protein_sources SET name = ?, portion = ?, protein_g = ? WHERE id = ?',
+    'UPDATE protein_sources SET name = ?, portion = ?, protein_g = ?, mode = ? WHERE id = ?',
     name.trim(),
     portion.trim(),
     proteinG,
+    mode,
     id
   );
 }
@@ -141,6 +150,21 @@ export async function addEntry(
 
 export async function logSource(userId: number, s: ProteinSource): Promise<void> {
   await addEntry(userId, s.name, s.protein_g, s.id);
+}
+
+/** Proteína de `qty` (gramas de carne ou número de unidades) da fonte, com 1 casa decimal. */
+export function proteinOf(s: ProteinSource, qty: number): number {
+  const g = s.mode === 'gramas' ? (qty * s.protein_g) / 100 : qty * s.protein_g;
+  return Math.round(g * 10) / 10;
+}
+
+/** Lança uma fonte por quantidade: gramas ("Frango 150 g") ou unidades ("Whey × 2"). */
+export async function logSourceQty(userId: number, s: ProteinSource, qty: number): Promise<number> {
+  const g = proteinOf(s, qty);
+  const q = String(qty).replace('.', ',');
+  const label = s.mode === 'gramas' ? `${s.name} ${q} g` : `${s.name} × ${q}`;
+  await addEntry(userId, label, g, s.id);
+  return g;
 }
 
 export async function deleteEntry(id: number): Promise<void> {

@@ -253,9 +253,17 @@ export type ProteinSource = {
   name: string;
   /** Descrição da porção que o toque registra, ex.: "1 unidade", "1 scoop (30 g)". */
   portion: string;
+  /** Gramas de proteína por porção ('porcao'), por 100 g ('gramas') ou por unidade ('unidades'). */
   protein_g: number;
   sort_order: number;
+  mode: ProteinMode;
 };
+
+/**
+ * Como a fonte é lançada: 'porcao' = 1 toque registra a porção; 'gramas' = pergunta o peso
+ * (carnes); 'unidades' = pergunta quantas (dosadores de whey).
+ */
+export type ProteinMode = 'porcao' | 'gramas' | 'unidades';
 
 export type ProteinEntry = {
   id: number;

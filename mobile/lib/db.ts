@@ -361,6 +361,40 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE workout_templates ADD COLUMN archived_at TEXT;
     `,
   },
+  {
+    // Proteína (pedido do Gutto, 17/11/2026): carne lançada em gramas por tipo (bovina, suína,
+    // frango, peixe), cada um com a sua concentração, e whey lançado em dosadores.
+    // mode: 'porcao' = 1 toque registra a porção; 'gramas' = protein_g é por 100 g e o app
+    // pergunta o peso; 'unidades' = protein_g é por unidade e o app pergunta quantas.
+    // A fonte "Carne" de quem já usa vira "Carne bovina" e ganha as outras três logo abaixo.
+    // Whey do rótulo: 30 g (2 dosadores) = 21 g de proteína → 10,5 g por dosador.
+    version: 15,
+    sql: `
+      ALTER TABLE protein_sources ADD COLUMN mode TEXT NOT NULL DEFAULT 'porcao';
+
+      UPDATE protein_sources SET mode = 'unidades', portion = '1 dosador (15 g)', protein_g = 10.5
+       WHERE lower(name) LIKE 'whey%';
+
+      UPDATE protein_sources SET sort_order = sort_order + 3
+       WHERE EXISTS (SELECT 1 FROM protein_sources c
+                      WHERE c.user_id = protein_sources.user_id
+                        AND lower(c.name) = 'carne'
+                        AND c.sort_order < protein_sources.sort_order);
+      INSERT INTO protein_sources (user_id, name, portion, protein_g, sort_order, mode)
+        SELECT user_id, 'Carne suína', '100 g (pronta)', 30, sort_order + 1, 'gramas'
+          FROM protein_sources WHERE lower(name) = 'carne';
+      INSERT INTO protein_sources (user_id, name, portion, protein_g, sort_order, mode)
+        SELECT user_id, 'Frango', '100 g (pronto)', 31, sort_order + 2, 'gramas'
+          FROM protein_sources WHERE lower(name) = 'carne';
+      INSERT INTO protein_sources (user_id, name, portion, protein_g, sort_order, mode)
+        SELECT user_id, 'Peixe', '100 g (pronto)', 26, sort_order + 3, 'gramas'
+          FROM protein_sources WHERE lower(name) = 'carne';
+      UPDATE protein_sources
+         SET name = 'Carne bovina', mode = 'gramas', portion = '100 g (pronta)',
+             protein_g = CASE WHEN protein_g IN (26, 35) THEN 32 ELSE protein_g END
+       WHERE lower(name) = 'carne';
+    `,
+  },
 ];
 
 async function applyMigrations(db: SQLite.SQLiteDatabase) {
